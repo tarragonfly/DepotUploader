@@ -1,6 +1,8 @@
 # Depot Uploader
 
-A Windows tool that uploads game builds to Steam with `steamcmd`. It lists every game that has an app build script in the Steamworks SDK's `ContentBuilder\scripts` folder, and you pick the one to upload. Games already set up with Valve's SteamPipe GUI appear in the list.
+A Windows tool that uploads game builds to Steam with `steamcmd` and keeps all your games in one window.
+
+Depot Uploader was made because Valve's SteamPipe GUI doesn't support multiple games in the same window. Depot Uploader lists every game that has an app build script in the Steamworks SDK's `ContentBuilder\scripts` folder, and you pick the one to upload. Games already set up with SteamPipe GUI appear in the list.
 
 ## Download
 
