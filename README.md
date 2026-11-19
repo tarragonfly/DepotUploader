@@ -48,3 +48,9 @@ After steamcmd exits, the log shows its exit code and the lines it added to `Con
 - Values can't contain a double quote.
 - The game names, the ContentBuilder path and the Steam login name are saved in `%APPDATA%\DepotUploader\settings.json`. The names are labels for the list and are not written to the scripts.
 - Comments in a script are removed when the tool saves it.
+
+## License
+
+MIT, see [LICENSE](LICENSE).
+
+Depot Uploader is not affiliated with Valve. This repository contains no Valve software. You need your own copy of the Steamworks SDK. Steam, Steamworks and SteamPipe are trademarks of Valve Corporation.
