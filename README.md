@@ -11,7 +11,7 @@ Download the exe from the [latest release](https://github.com/tarragonfly/DepotU
 | File | Needs |
 |---|---|
 | `DepotUploader-<version>-win-x64.exe` | 64-bit Windows |
-| `DepotUploader-<version>-win-x64-needs-dotnet8.exe` | 64-bit Windows and the .NET 8 Desktop Runtime |
+| `DepotUploader-<version>-win-x64-needs-dotnet10.exe` | 64-bit Windows and the .NET 10 Desktop Runtime |
 
 The exes are not signed. Windows SmartScreen may ask before it starts one for the first time.
 
@@ -19,7 +19,7 @@ The exes are not signed. Windows SmartScreen may ask before it starts one for th
 
 - Windows
 - The Steamworks SDK with `sdk\tools\ContentBuilder\builder\steamcmd.exe`
-- .NET 8 SDK to build from source
+- .NET 10 SDK to build from source
 
 ## Build and run
 
@@ -28,13 +28,13 @@ dotnet publish src/DepotUploader -c Release -o publish
 publish\DepotUploader.exe
 ```
 
-This build needs the .NET 8 Desktop Runtime to run. Run the tests with `dotnet test`.
+This build needs the .NET 10 Desktop Runtime to run. Run the tests with `dotnet test`.
 
 The two release exes are built with:
 
 ```
 dotnet publish src/DepotUploader -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:EnableCompressionInSingleFile=true -p:DebugType=none -o artifacts/self-contained
-dotnet publish src/DepotUploader -c Release -r win-x64 --self-contained false -p:PublishSingleFile=true -p:DebugType=none -o artifacts/needs-dotnet8
+dotnet publish src/DepotUploader -c Release -r win-x64 --self-contained false -p:PublishSingleFile=true -p:DebugType=none -o artifacts/needs-dotnet10
 ```
 
 ## Use
