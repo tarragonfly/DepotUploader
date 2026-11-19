@@ -6,14 +6,14 @@ Depot Uploader was made because Valve's SteamPipe GUI doesn't support multiple g
 
 ## Download
 
-Download the exe from the [latest release](https://github.com/tarragonfly/DepotUploader/releases/latest). Each release has two files:
+Download the exe from the [latest release](https://github.com/tarragonfly/DepotUploader/releases/latest). Each release has two single-file builds for win-x64:
 
-| File | Needs |
-|---|---|
-| `DepotUploader-<version>-win-x64.exe` | 64-bit Windows |
-| `DepotUploader-<version>-win-x64-needs-dotnet10.exe` | 64-bit Windows and the .NET 10 Desktop Runtime |
+| File | Deployment | Dependencies |
+|---|---|---|
+| `DepotUploader-<version>-win-x64.exe` | Self-contained | None |
+| `DepotUploader-<version>-win-x64-needs-dotnet10.exe` | Framework-dependent | .NET 10 Desktop Runtime |
 
-The exes are not signed. Windows SmartScreen may ask before it starts one for the first time.
+The exes are not code-signed. Windows SmartScreen may show a warning on first run.
 
 ## Requirements
 
@@ -28,7 +28,7 @@ dotnet publish src/DepotUploader -c Release -o publish
 publish\DepotUploader.exe
 ```
 
-This build needs the .NET 10 Desktop Runtime to run. Run the tests with `dotnet test`.
+This build is framework-dependent and requires the .NET 10 Desktop Runtime. Run the tests with `dotnet test`.
 
 The two release exes are built with:
 
