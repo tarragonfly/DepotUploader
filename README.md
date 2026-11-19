@@ -2,11 +2,22 @@
 
 A Windows tool that uploads game builds to Steam with `steamcmd`. It lists every game that has an app build script in the Steamworks SDK's `ContentBuilder\scripts` folder, and you pick the one to upload. Games already set up with Valve's SteamPipe GUI appear in the list.
 
+## Download
+
+Download the exe from the [latest release](https://github.com/tarragonfly/DepotUploader/releases/latest). Each release has two files:
+
+| File | Needs |
+|---|---|
+| `DepotUploader-<version>-win-x64.exe` | 64-bit Windows |
+| `DepotUploader-<version>-win-x64-needs-dotnet8.exe` | 64-bit Windows and the .NET 8 Desktop Runtime |
+
+The exes are not signed. Windows SmartScreen may ask before it starts one for the first time.
+
 ## Requirements
 
 - Windows
-- .NET 8 SDK to build, .NET 8 Desktop Runtime to run
 - The Steamworks SDK with `sdk\tools\ContentBuilder\builder\steamcmd.exe`
+- .NET 8 SDK to build from source
 
 ## Build and run
 
@@ -15,7 +26,14 @@ dotnet publish src/DepotUploader -c Release -o publish
 publish\DepotUploader.exe
 ```
 
-Run the tests with `dotnet test`.
+This build needs the .NET 8 Desktop Runtime to run. Run the tests with `dotnet test`.
+
+The two release exes are built with:
+
+```
+dotnet publish src/DepotUploader -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:EnableCompressionInSingleFile=true -p:DebugType=none -o artifacts/self-contained
+dotnet publish src/DepotUploader -c Release -r win-x64 --self-contained false -p:PublishSingleFile=true -p:DebugType=none -o artifacts/needs-dotnet8
+```
 
 ## Use
 
