@@ -6,14 +6,9 @@ Depot Uploader was made because Valve's SteamPipe GUI doesn't support multiple g
 
 ## Download
 
-Download the exe from the [latest release](https://github.com/tarragonfly/DepotUploader/releases/latest). Each release has two single-file builds for win-x64:
+Download `DepotUploader-<version>-win-x64.exe` from the [latest release](https://github.com/tarragonfly/DepotUploader/releases/latest). It's a self-contained, trimmed single-file build for win-x64 with no dependencies.
 
-| File | Deployment | Dependencies |
-|---|---|---|
-| `DepotUploader-<version>-win-x64.exe` | Self-contained | None |
-| `DepotUploader-<version>-win-x64-needs-dotnet10.exe` | Framework-dependent | .NET 10 Desktop Runtime |
-
-The exes are not code-signed. Windows SmartScreen may show a warning on first run.
+The exe is not code-signed. Windows SmartScreen may show a warning on first run.
 
 ## Requirements
 
@@ -28,14 +23,19 @@ dotnet publish src/DepotUploader -c Release -o publish
 publish\DepotUploader.exe
 ```
 
-This build is framework-dependent and requires the .NET 10 Desktop Runtime. Run the tests with `dotnet test`.
+This is the release build: a self-contained single-file exe for win-x64, trimmed and compressed, 13.8 MB. Run the tests with `dotnet test`.
 
-The two release exes are built with:
+### Other builds
 
-```
-dotnet publish src/DepotUploader -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:EnableCompressionInSingleFile=true -p:DebugType=none -o artifacts/self-contained
-dotnet publish src/DepotUploader -c Release -r win-x64 --self-contained false -p:PublishSingleFile=true -p:DebugType=none -o artifacts/needs-dotnet10
-```
+Add one of these properties to the `dotnet publish` command:
+
+| Property | Build | Exe size | Requires |
+|---|---|---|---|
+| `-p:PublishSelfContained=false` | Framework-dependent single file | 0.2 MB | To run: .NET 10 Desktop Runtime |
+| `-p:PublishTrimmed=false` | Self-contained single file, untrimmed | 46.9 MB | |
+| `-p:PublishAot=true` | Native AOT | 17.5 MB | To build: the Visual Studio workload Desktop development with C++, and `vswhere.exe` on `PATH` |
+
+Microsoft doesn't support trimming or Native AOT for Windows Forms. The project sets `_SuppressWinFormsTrimError` to build both. If the release build fails at runtime, use the framework-dependent or untrimmed build.
 
 ## Use
 
