@@ -7,13 +7,13 @@ internal static class KeyValuesText
     public static KeyValuesNode Parse(string text)
     {
         int position = 0;
-        string? rootKey = ReadToken(text, ref position);
-        if (rootKey is null || rootKey == "{" || rootKey == "}")
+        string? rootKey = ReadToken(text, ref position, out bool rootKeyIsBrace);
+        if (rootKey is null || rootKeyIsBrace)
         {
             throw new FormatException("The script has no root key.");
         }
 
-        if (ReadToken(text, ref position) != "{")
+        if (ReadToken(text, ref position, out bool isBrace) != "{" || !isBrace)
         {
             throw new FormatException($"Expected a block after \"{rootKey}\".");
         }
@@ -36,24 +36,24 @@ internal static class KeyValuesText
     {
         while (true)
         {
-            string? key = ReadToken(text, ref position);
+            string? key = ReadToken(text, ref position, out bool keyIsBrace);
             if (key is null)
             {
                 throw new FormatException($"The block \"{block.Key}\" is not closed.");
             }
 
-            if (key == "}")
+            if (keyIsBrace && key == "}")
             {
                 return;
             }
 
-            string? value = ReadToken(text, ref position);
-            if (value is null || value == "}")
+            string? value = ReadToken(text, ref position, out bool valueIsBrace);
+            if (value is null || (valueIsBrace && value == "}"))
             {
                 throw new FormatException($"\"{key}\" has no value.");
             }
 
-            if (value == "{")
+            if (valueIsBrace)
             {
                 KeyValuesNode child = new KeyValuesNode(key);
                 ReadBlock(text, ref position, child);
@@ -66,8 +66,9 @@ internal static class KeyValuesText
         }
     }
 
-    private static string? ReadToken(string text, ref int position)
+    private static string? ReadToken(string text, ref int position, out bool isBrace)
     {
+        isBrace = false;
         SkipWhitespaceAndComments(text, ref position);
         if (position >= text.Length)
         {
@@ -78,6 +79,7 @@ internal static class KeyValuesText
         if (first == '{' || first == '}')
         {
             position++;
+            isBrace = true;
 
             return first.ToString();
         }
