@@ -8,6 +8,7 @@ internal sealed class AddGameForm : Form
 
     public AddGameForm()
     {
+        SuspendLayout();
         AutoScaleDimensions = new SizeF(96f, 96f);
         AutoScaleMode = AutoScaleMode.Dpi;
         Text = "Add game";
@@ -48,6 +49,7 @@ internal sealed class AddGameForm : Form
         layout.Controls.Add(buttons, 0, 3);
         layout.SetColumnSpan(buttons, 2);
         Controls.Add(layout);
+        ResumeLayout();
     }
 
     public string GameName => _gameNameBox.Text.Trim();

@@ -44,6 +44,7 @@ internal sealed class MainForm : Form
     {
         _settings = UploaderSettings.Load(_settingsPath, out string? settingsLoadError);
 
+        SuspendLayout();
         AutoScaleDimensions = new SizeF(96f, 96f);
         AutoScaleMode = AutoScaleMode.Dpi;
         Text = "Depot Uploader";
@@ -68,6 +69,9 @@ internal sealed class MainForm : Form
         windowLayout.Controls.Add(_logBox, 0, 1);
         windowLayout.Controls.Add(BuildSteamSetupPanel(), 0, 2);
         Controls.Add(windowLayout);
+        ResumeLayout();
+        Size workingAreaSize = Screen.FromPoint(MousePosition).WorkingArea.Size;
+        Size = new Size(Math.Min(Width, workingAreaSize.Width), Math.Min(Height, workingAreaSize.Height));
 
         _contentBuilderPathBox.Text = _settings.ContentBuilderPath;
         _steamLoginBox.Text = _settings.SteamLogin;
@@ -134,7 +138,13 @@ internal sealed class MainForm : Form
         _depotGrid.RowHeadersVisible = false;
         _depotGrid.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
         _depotGrid.MultiSelect = false;
-        _depotGrid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Depot", ReadOnly = true, Width = 90 });
+        _depotGrid.ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.AutoSize;
+        _depotGrid.Columns.Add(new DataGridViewTextBoxColumn
+        {
+            HeaderText = "Depot",
+            ReadOnly = true,
+            AutoSizeMode = DataGridViewAutoSizeColumnMode.AllCells,
+        });
         _depotGrid.Columns.Add(new DataGridViewTextBoxColumn
         {
             HeaderText = "Content folder",

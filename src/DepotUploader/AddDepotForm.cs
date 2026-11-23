@@ -6,6 +6,7 @@ internal sealed class AddDepotForm : Form
 
     public AddDepotForm()
     {
+        SuspendLayout();
         AutoScaleDimensions = new SizeF(96f, 96f);
         AutoScaleMode = AutoScaleMode.Dpi;
         Text = "Add depot";
@@ -45,6 +46,7 @@ internal sealed class AddDepotForm : Form
         layout.Controls.Add(buttons, 0, 1);
         layout.SetColumnSpan(buttons, 2);
         Controls.Add(layout);
+        ResumeLayout();
     }
 
     public string DepotId => _depotIdBox.Text.Trim();
