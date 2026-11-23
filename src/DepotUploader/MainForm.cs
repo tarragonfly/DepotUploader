@@ -5,7 +5,9 @@ namespace DepotUploader;
 internal sealed class MainForm : Form
 {
     private const int ContentFolderColumn = 1;
-    private const int ContentSummaryColumn = 2;
+    private const int BrowseContentFolderColumn = 2;
+    private const int ContentSummaryColumn = 3;
+    private const int RemoveDepotColumn = 4;
 
     private readonly string _settingsPath = UploaderSettings.DefaultFilePath;
     private readonly UploaderSettings _settings;
@@ -21,8 +23,6 @@ internal sealed class MainForm : Form
     private readonly CheckBox _uploadsNothingBox = new CheckBox { Text = "Preview only, upload nothing", AutoSize = true };
     private readonly DataGridView _depotGrid = new DataGridView();
     private readonly Button _addDepotButton = new Button { Text = "Add depot...", AutoSize = true };
-    private readonly Button _removeDepotButton = new Button { Text = "Remove depot", AutoSize = true };
-    private readonly Button _browseDepotFolderButton = new Button { Text = "Choose content folder...", AutoSize = true };
     private readonly Button _saveButton = new Button { Text = "Save", AutoSize = true };
     private readonly Button _uploadButton = new Button { Text = "Upload", AutoSize = true };
     private readonly Button _stopButton = new Button { Text = "Stop", AutoSize = true, Enabled = false };
@@ -140,25 +140,24 @@ internal sealed class MainForm : Form
             HeaderText = "Content folder",
             AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill,
         });
+        _depotGrid.Columns.Add(NewDepotRowButtonColumn("Browse..."));
         _depotGrid.Columns.Add(new DataGridViewTextBoxColumn
         {
             HeaderText = "Contents",
             ReadOnly = true,
             AutoSizeMode = DataGridViewAutoSizeColumnMode.AllCells,
         });
+        _depotGrid.Columns.Add(NewDepotRowButtonColumn("X"));
         _depotGrid.CellEndEdit += (_, cell) => ShowContentSummary(_depotGrid.Rows[cell.RowIndex]);
+        _depotGrid.CellContentClick += (_, cell) => RunDepotRowButton(cell.RowIndex, cell.ColumnIndex);
 
         _addDepotButton.Click += (_, _) => AddDepot();
-        _removeDepotButton.Click += (_, _) => RemoveSelectedDepot();
-        _browseDepotFolderButton.Click += (_, _) => BrowseDepotContentFolder();
         _saveButton.Click += (_, _) => SaveShownGame();
         _uploadButton.Click += async (_, _) => await UploadShownGameAsync();
         _stopButton.Click += (_, _) => _uploadCancellation?.Cancel();
 
         FlowLayoutPanel buttons = new FlowLayoutPanel { Dock = DockStyle.Fill, AutoSize = true };
         buttons.Controls.Add(_addDepotButton);
-        buttons.Controls.Add(_removeDepotButton);
-        buttons.Controls.Add(_browseDepotFolderButton);
         buttons.Controls.Add(_saveButton);
         buttons.Controls.Add(_uploadButton);
         buttons.Controls.Add(_stopButton);
@@ -199,6 +198,35 @@ internal sealed class MainForm : Form
     private static Label NewLabel(string text)
     {
         return new Label { Text = text, AutoSize = true, Anchor = AnchorStyles.Left };
+    }
+
+    private static DataGridViewButtonColumn NewDepotRowButtonColumn(string buttonText)
+    {
+        return new DataGridViewButtonColumn
+        {
+            HeaderText = string.Empty,
+            Text = buttonText,
+            UseColumnTextForButtonValue = true,
+            AutoSizeMode = DataGridViewAutoSizeColumnMode.AllCells,
+        };
+    }
+
+    private void RunDepotRowButton(int rowIndex, int columnIndex)
+    {
+        if (rowIndex < 0)
+        {
+            return;
+        }
+
+        DataGridViewRow row = _depotGrid.Rows[rowIndex];
+        if (columnIndex == BrowseContentFolderColumn)
+        {
+            BrowseDepotContentFolder(row);
+        }
+        else if (columnIndex == RemoveDepotColumn)
+        {
+            RemoveDepot(row);
+        }
     }
 
     private void BrowseContentBuilderFolder()
@@ -322,8 +350,6 @@ internal sealed class MainForm : Form
         _uploadsNothingBox.Enabled = hasGame;
         _depotGrid.Enabled = hasGame;
         _addDepotButton.Enabled = hasGame;
-        _removeDepotButton.Enabled = hasGame;
-        _browseDepotFolderButton.Enabled = hasGame;
         _saveButton.Enabled = hasGame;
         _uploadButton.Enabled = hasGame && _uploadCancellation is null;
         _depotGrid.Rows.Clear();
@@ -351,8 +377,9 @@ internal sealed class MainForm : Form
 
     private DataGridViewRow AddDepotRow(DepotBuildScript depot)
     {
-        DataGridViewRow row = _depotGrid.Rows[_depotGrid.Rows.Add(depot.DepotId, depot.ContentFolder, string.Empty)];
+        DataGridViewRow row = _depotGrid.Rows[_depotGrid.Rows.Add(depot.DepotId, depot.ContentFolder)];
         row.Tag = depot;
+        row.Cells[RemoveDepotColumn].ToolTipText = "Remove depot";
         ShowContentSummary(row);
 
         return row;
@@ -394,16 +421,9 @@ internal sealed class MainForm : Form
             : $"Wrote {Path.GetFileName(depotScriptPath)}."));
     }
 
-    private void RemoveSelectedDepot()
+    private void RemoveDepot(DataGridViewRow row)
     {
-        _depotGrid.EndEdit();
-        DataGridViewRow? row = _depotGrid.CurrentRow;
-        if (_shownGame is null || row is null)
-        {
-            return;
-        }
-
-        AppBuildScript game = _shownGame;
+        AppBuildScript game = _shownGame!;
         DepotBuildScript depot = DepotInRow(row);
         string depotScriptName = Path.GetFileName(depot.FilePath);
         string depotScriptPathAddDepotUses = game.DepotScriptPath(depot.DepotId);
@@ -469,14 +489,8 @@ internal sealed class MainForm : Form
         row.Cells[ContentSummaryColumn].Value = summary;
     }
 
-    private void BrowseDepotContentFolder()
+    private void BrowseDepotContentFolder(DataGridViewRow row)
     {
-        DataGridViewRow? row = _depotGrid.CurrentRow;
-        if (row is null)
-        {
-            return;
-        }
-
         string? pickedFolder = FolderPicker.Show(this,
             $"Choose the build folder to upload to depot {DepotInRow(row).DepotId}",
             _shownGame!.AbsoluteContentFolder(DepotInRow(row), ContentFolderInRow(row)));
