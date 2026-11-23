@@ -33,13 +33,17 @@ This is the release build: one exe of about 67 KB that targets `net48`, with no 
 
 The game list shows every `app_<appid>.vdf` in `ContentBuilder\scripts`. These are the scripts SteamPipe GUI writes, and both tools can edit them. When an app script can't be read, the log names it and the other games still load. **Add game...** writes a new `app_<appid>.vdf` and one `depot_<depotid>.vdf` per depot. Each depot uploads its whole content folder except `*.pdb` files.
 
-**Add depot...** adds a depot to the selected game. It writes `depot_<depotid>.vdf` next to the app script and adds the depot to the `depots` block of the app script. When `depot_<depotid>.vdf` already exists, the tool uses that file and doesn't write it. **X** at the end of a depot row removes that depot from the `depots` block. It keeps `depot_<depotid>.vdf`, and adding the depot again uses that file with its content folder. Both buttons write the scripts immediately, without **Save**. Your other unsaved edits stay in the window and are not written.
+**Add depot...** adds a depot to the selected game. It writes `depot_<depotid>.vdf` next to the app script and adds the depot to the `depots` block of the app script. When `depot_<depotid>.vdf` already exists, the tool uses that file and doesn't write it. **X** at the end of a depot row removes that depot from the `depots` block. It keeps `depot_<depotid>.vdf`, and adding the depot again uses that file with its content folder. Both buttons write the scripts immediately.
 
 **Add depot...** only uses `depot_<depotid>.vdf` next to the app script. A depot script with another name or in another folder still loads and uploads. After you remove such a depot with **X**, you have to add it back to the `depots` block by hand, and the confirmation shows the path of its script.
 
-**Save** writes only the scripts you edited, and it writes all of them or none. When a script changed on disk after the tool loaded it, **Save** writes nothing and names the script. Click **Reload** to read the scripts again. **Reload** discards the edits in the window.
+There is no Save button. The tool saves an edit when you leave its text box or change **Preview only, upload nothing**. A content folder is saved when you finish editing its cell or pick it with **Browse...**. Closing the window saves an edit that is still in a text box or a cell.
 
-**Upload** saves the scripts, asks you to confirm, then runs steamcmd on copies of the scripts in a temporary folder. The copies use absolute paths. Editing a script while steamcmd runs doesn't change that upload.
+A save writes only the scripts that changed, and it writes all of them or none. A branch or content folder you type is saved without leading and trailing spaces. A value you don't edit is written back as it is in the script.
+
+When a save fails, the log gives the reason and the edit stays in the window. A save fails when a script changed on disk after the tool loaded it, and nothing is written then. Until the edit is saved, **Upload** doesn't start, you can't select another game, and closing the window asks whether to lose the edit. Click **Reload** to read the scripts again. **Reload** discards the edits in the window, including one you are still typing.
+
+**Upload** asks you to confirm, then runs steamcmd on copies of the scripts in a temporary folder. The copies use absolute paths. Editing a script while steamcmd runs doesn't change that upload. **Upload** doesn't start when a script changed on disk after the tool loaded it.
 
 | Field | Script key | Effect |
 |---|---|---|
@@ -62,7 +66,7 @@ After steamcmd exits, the log shows its exit code and the lines it added to `Con
 - When `settings.json` can't be read or isn't valid JSON, the tool starts with empty settings and doesn't write the file. The log names the error. Fix or delete the file, then start the tool again.
 - A save writes the new text to `<file>.<id>.new` and replaces the file with it. The replaced file is kept as `<file>.<id>.previous` until the save is done. When a save fails and the tool can't put a file back, the error names the `.previous` file that holds it. Rename that file to the original name.
 - When `settings.json` is missing and `settings.json.previous` or `settings.json.<id>.previous` exists, the tool starts with empty settings and doesn't save them. Rename the backup to `settings.json`, then start the tool again.
-- Ending the process during **Save** can leave `.new` and `.previous` files, and some scripts with the new text and others with the old text.
+- Ending the process during a save can leave `.new` and `.previous` files, and some scripts with the new text and others with the old text.
 - Comments in a script are removed when the tool saves it.
 
 ## License
