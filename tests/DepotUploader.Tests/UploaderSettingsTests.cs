@@ -24,6 +24,52 @@ public class UploaderSettingsTests
     }
 
     [Test]
+    public void Save_WritesIndentedJsonThatLoadReadsBackWithEveryCharacter()
+    {
+        using TemporaryContentBuilderFolder folder = new TemporaryContentBuilderFolder();
+        string settingsPath = Path.Combine(folder.ContentBuilderPath, "settings.json");
+        UploaderSettings saved = new UploaderSettings
+        {
+            ContentBuilderPath = @"C:\steamworks\sdk\tools\ContentBuilder",
+            SteamLogin = "builder \"quoted\" <account> & it's\ttabbed",
+        };
+        saved.GameNamesByAppId["100030"] = "Sample Game: Za\u017c\u00f3\u0142\u0107 /Date(1)/ \u65e5\u672c\u8a9e";
+        saved.GameNamesByAppId["200040"] = string.Empty;
+
+        saved.Save(settingsPath);
+        string[] lines = File.ReadAllLines(settingsPath);
+        UploaderSettings loaded = UploaderSettings.Load(settingsPath, out string? loadError);
+
+        Assert.That(lines[0], Is.EqualTo("{"));
+        Assert.That(lines[1], Is.EqualTo("  \"ContentBuilderPath\": \"C:\\\\steamworks\\\\sdk\\\\tools\\\\ContentBuilder\","));
+        Assert.That(lines[2], Does.StartWith("  \"SteamLogin\": \""));
+        Assert.That(lines[3], Is.EqualTo("  \"GameNamesByAppId\": {"));
+        Assert.That(lines[4], Does.StartWith("    \"100030\": \""));
+        Assert.That(lines[5], Is.EqualTo("    \"200040\": \"\""));
+        Assert.That(lines[6], Is.EqualTo("  }"));
+        Assert.That(lines[7], Is.EqualTo("}"));
+        Assert.That(lines, Has.Length.EqualTo(8));
+        Assert.That(loadError, Is.Null);
+        Assert.That(loaded.SteamLogin, Is.EqualTo(saved.SteamLogin));
+        Assert.That(loaded.GameNamesByAppId, Is.EqualTo(saved.GameNamesByAppId));
+    }
+
+    [Test]
+    public void Save_WritesAnEmptyJsonObjectWhenNoGameHasAName()
+    {
+        using TemporaryContentBuilderFolder folder = new TemporaryContentBuilderFolder();
+        string settingsPath = Path.Combine(folder.ContentBuilderPath, "settings.json");
+
+        new UploaderSettings { SteamLogin = "builder_account" }.Save(settingsPath);
+        UploaderSettings loaded = UploaderSettings.Load(settingsPath, out string? loadError);
+
+        Assert.That(File.ReadAllLines(settingsPath)[3], Is.EqualTo("  \"GameNamesByAppId\": {}"));
+        Assert.That(loadError, Is.Null);
+        Assert.That(loaded.SteamLogin, Is.EqualTo("builder_account"));
+        Assert.That(loaded.GameNamesByAppId, Is.Empty);
+    }
+
+    [Test]
     public void Load_StartsEmptyWhenThereIsNoSettingsFile()
     {
         using TemporaryContentBuilderFolder folder = new TemporaryContentBuilderFolder();
@@ -79,9 +125,63 @@ public class UploaderSettingsTests
         Assert.That(withNullName.GameName("100030"), Is.EqualTo("App 100030"));
     }
 
+    [Test]
+    public void Load_IgnoresUnknownMembersAndReadsEscapedTextAsWritten()
+    {
+        using TemporaryContentBuilderFolder folder = new TemporaryContentBuilderFolder();
+        string settingsPath = Path.Combine(folder.ContentBuilderPath, "settings.json");
+        File.WriteAllText(settingsPath,
+            "{ \"__type\": 0, \"Window\": { \"Size\": [ 1100, 760 ], \"Title\": \"} ]\" }, \"Version\": 2, "
+            + "\"Beta\": true, \"SteamLogin\": \"builder_account\", "
+            + "\"GameNamesByAppId\": { \"__type\": null, \"100030\": \"\\/Date(0)\\/\", "
+            + "\"200040\": \"a \\\"quoted\\\" \\\\ name\", \"type\": \"Type Game\", \"item\": \"Item Game\" } }");
+
+        UploaderSettings loaded = UploaderSettings.Load(settingsPath, out string? loadError);
+
+        Assert.That(loadError, Is.Null);
+        Assert.That(loaded.MustNotOverwriteFile, Is.False);
+        Assert.That(loaded.SteamLogin, Is.EqualTo("builder_account"));
+        Assert.That(loaded.GameName("100030"), Is.EqualTo("/Date(0)/"));
+        Assert.That(loaded.GameName("200040"), Is.EqualTo("a \"quoted\" \\ name"));
+        Assert.That(loaded.GameName("__type"), Is.EqualTo("App __type"));
+        Assert.That(loaded.GameName("type"), Is.EqualTo("Type Game"));
+        Assert.That(loaded.GameName("item"), Is.EqualTo("Item Game"));
+        Assert.That(loaded.GameNamesByAppId, Has.Count.EqualTo(5));
+    }
+
+    [Test]
+    public void Load_ReadsTheLastOfTwoMembersWithTheSameName()
+    {
+        using TemporaryContentBuilderFolder folder = new TemporaryContentBuilderFolder();
+        string settingsPath = Path.Combine(folder.ContentBuilderPath, "settings.json");
+        File.WriteAllText(settingsPath,
+            "{ \"SteamLogin\": \"first_account\", \"SteamLogin\": \"builder_account\", "
+            + "\"GameNamesByAppId\": { \"100030\": \"First Name\", \"100030\": \"Sample Game\" } }");
+
+        UploaderSettings loaded = UploaderSettings.Load(settingsPath, out string? loadError);
+
+        Assert.That(loadError, Is.Null);
+        Assert.That(loaded.SteamLogin, Is.EqualTo("builder_account"));
+        Assert.That(loaded.GameName("100030"), Is.EqualTo("Sample Game"));
+    }
+
     [TestCase("{ \"SteamLogin\": \"builder_acc")]
     [TestCase("{ \"SteamLogin\": 5 }")]
     [TestCase("[ \"builder_account\" ]")]
+    [TestCase("{ \"SteamLogin\": \"builder_account\"")]
+    [TestCase("{ \"SteamLogin\": \"builder_account\",")]
+    [TestCase("{ \"GameNamesByAppId\": { \"100030\": \"Sample Game\" }")]
+    [TestCase("{ \"GameNamesByAppId\": [ \"Sample Game\" ] }")]
+    [TestCase("{ \"SteamLogin\": \"builder_account\" } and more text")]
+    [TestCase("{ \"SteamLogin\": \"builder_account\" }{}")]
+    [TestCase("{ \"SteamLogin\": 1, \"SteamLogin\": \"builder_account\" }")]
+    [TestCase("{ \"GameNamesByAppId\": { \"100030\": 1, \"100030\": \"Sample Game\" } }")]
+    [TestCase("{ \"GameNamesByAppId\": { \"100030\": \"Sample \\ud800 Game\" } }")]
+    [TestCase("{ \"SteamLogin\": \"builder_account\" }null")]
+    [TestCase("{ SteamLogin: \"builder_account\" }")]
+    [TestCase("{ 'SteamLogin': 'builder_account' }")]
+    [TestCase("")]
+    [TestCase("  \r\n")]
     public void Load_LeavesAnInvalidFileUntouchedAndRefusesToSave(string invalidText)
     {
         using TemporaryContentBuilderFolder folder = new TemporaryContentBuilderFolder();

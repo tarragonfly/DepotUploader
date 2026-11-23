@@ -1,6 +1,3 @@
-using System.Text.Json;
-using System.Text.Json.Serialization;
-
 namespace DepotUploader;
 
 internal sealed class UploaderSettings
@@ -11,7 +8,6 @@ internal sealed class UploaderSettings
 
     public Dictionary<string, string> GameNamesByAppId { get; set; } = new Dictionary<string, string>();
 
-    [JsonIgnore]
     public bool MustNotOverwriteFile { get; private set; }
 
     public static string DefaultFilePath => Path.Combine(
@@ -37,14 +33,10 @@ internal sealed class UploaderSettings
                 return new UploaderSettings { MustNotOverwriteFile = true };
             }
 
-            UploaderSettings settings = JsonSerializer.Deserialize(text,
-                UploaderSettingsJsonContext.Default.UploaderSettings) ?? new UploaderSettings();
-            settings.ReplaceNullValues();
-
-            return settings;
+            return FromJson(text);
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException
-            or JsonException)
+            or FormatException)
         {
             loadError = $"{filePath} could not be loaded, so the settings start empty and are not saved. "
                 + $"{exception.Message} Fix or delete the file, then start Depot Uploader again.";
@@ -68,8 +60,7 @@ internal sealed class UploaderSettings
             throw new IOException(MissingFileWithBackupText(filePath, backupFilePath));
         }
 
-        string text = JsonSerializer.Serialize(this, UploaderSettingsJsonContext.Default.UploaderSettings);
-        AllOrNothingFileWrite.WriteAll(new[] { (filePath, text) });
+        AllOrNothingFileWrite.WriteAll(new[] { (filePath, ToIndentedJson()) });
     }
 
     public string GameName(string appId)
@@ -77,6 +68,70 @@ internal sealed class UploaderSettings
         return GameNamesByAppId.TryGetValue(appId, out string? name) && !string.IsNullOrEmpty(name)
             ? name
             : $"App {appId}";
+    }
+
+    private static UploaderSettings FromJson(string text)
+    {
+        UploaderSettings settings = new UploaderSettings();
+        foreach (KeyValuePair<string, object?> member in MembersOfJsonObject(JsonText.Parse(text), "The JSON text"))
+        {
+            switch (member.Key)
+            {
+                case nameof(ContentBuilderPath):
+                    settings.ContentBuilderPath = JsonTextOrEmpty(member);
+                    break;
+                case nameof(SteamLogin):
+                    settings.SteamLogin = JsonTextOrEmpty(member);
+                    break;
+                case nameof(GameNamesByAppId):
+                    settings.GameNamesByAppId = new Dictionary<string, string>();
+                    foreach (KeyValuePair<string, object?> gameName in MembersOfJsonObject(member.Value, member.Key))
+                    {
+                        settings.GameNamesByAppId[gameName.Key] = JsonTextOrEmpty(gameName);
+                    }
+
+                    break;
+            }
+        }
+
+        return settings;
+    }
+
+    private static IEnumerable<KeyValuePair<string, object?>> MembersOfJsonObject(object? json, string name)
+    {
+        return json switch
+        {
+            null => Enumerable.Empty<KeyValuePair<string, object?>>(),
+            List<KeyValuePair<string, object?>> members => members,
+            _ => throw new FormatException($"{name} is not a JSON object."),
+        };
+    }
+
+    private static string JsonTextOrEmpty(KeyValuePair<string, object?> member)
+    {
+        return member.Value switch
+        {
+            null => string.Empty,
+            string text => text,
+            _ => throw new FormatException($"{member.Key} is not text."),
+        };
+    }
+
+    private string ToIndentedJson()
+    {
+        IEnumerable<string> gameNameLines = GameNamesByAppId.Select(gameName =>
+            $"    {JsonText.Quote(gameName.Key)}: {JsonText.Quote(gameName.Value ?? string.Empty)}");
+        string gameNames = GameNamesByAppId.Count == 0
+            ? "{}"
+            : "{" + Environment.NewLine + string.Join("," + Environment.NewLine, gameNameLines)
+            + Environment.NewLine + "  }";
+
+        return string.Join(Environment.NewLine,
+            "{",
+            $"  \"{nameof(ContentBuilderPath)}\": {JsonText.Quote(ContentBuilderPath)},",
+            $"  \"{nameof(SteamLogin)}\": {JsonText.Quote(SteamLogin)},",
+            $"  \"{nameof(GameNamesByAppId)}\": {gameNames}",
+            "}");
     }
 
     private static string? ReadTextIfPresent(string filePath)
@@ -111,12 +166,5 @@ internal sealed class UploaderSettings
     {
         return $"{filePath} is missing and a backup of it is kept as {backupFilePath}. Rename the backup to "
             + $"{Path.GetFileName(filePath)}, then start Depot Uploader again.";
-    }
-
-    private void ReplaceNullValues()
-    {
-        ContentBuilderPath ??= string.Empty;
-        SteamLogin ??= string.Empty;
-        GameNamesByAppId ??= new Dictionary<string, string>();
     }
 }
