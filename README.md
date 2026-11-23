@@ -6,13 +6,13 @@ Depot Uploader was made because Valve's SteamPipe GUI doesn't support multiple g
 
 ## Download
 
-Download `DepotUploader-<version>-win-x64.exe` from the [latest release](https://github.com/tarragonfly/DepotUploader/releases/latest). It's a self-contained, trimmed single-file build for win-x64 with no dependencies.
+Download `DepotUploader-<version>-win-x64.exe` from the [latest release](https://github.com/tarragonfly/DepotUploader/releases/latest). It's a framework-dependent single exe that requires .NET Framework 4.8, a Windows component since Windows 10 version 1903.
 
 The exe is not code-signed. Windows SmartScreen may show a warning on first run.
 
 ## Requirements
 
-- Windows
+- Windows 10 version 1903 or later, or Windows 11. Earlier Windows 10 versions need .NET Framework 4.8 installed.
 - The Steamworks SDK with `sdk\tools\ContentBuilder\builder\steamcmd.exe`
 - .NET 10 SDK to build from source
 
@@ -23,19 +23,7 @@ dotnet publish src/DepotUploader -c Release -o publish
 publish\DepotUploader.exe
 ```
 
-This is the release build: a self-contained single-file exe for win-x64, trimmed and compressed, 13.8 MB. The project applies these settings only in `dotnet publish`. `dotnet build`, `dotnet run` and `dotnet test` build a framework-dependent app, so `dotnet publish --no-build` stops with an error. Run the tests with `dotnet test`.
-
-### Other builds
-
-Add one of these options to the `dotnet publish` command:
-
-| Option | Build | Exe size | Requires |
-|---|---|---|---|
-| `--self-contained false` | Framework-dependent single file | 0.2 MB | To run: .NET 10 Desktop Runtime |
-| `-p:PublishTrimmed=false` | Self-contained single file, untrimmed | 46.9 MB | |
-| `-p:PublishAot=true` | Native AOT | 17.5 MB | To build: the Visual Studio workload Desktop development with C++, and `vswhere.exe` on `PATH` |
-
-Microsoft doesn't support trimming or Native AOT for Windows Forms. The project sets `_SuppressWinFormsTrimError` to build both. If the release build fails at runtime, use the framework-dependent or untrimmed build.
+This is the release build: one exe of about 64 KB that targets `net48`, with no other files. Run the tests with `dotnet test`.
 
 ## Use
 
