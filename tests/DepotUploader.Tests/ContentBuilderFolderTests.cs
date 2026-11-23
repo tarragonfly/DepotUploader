@@ -101,4 +101,17 @@ public class ContentBuilderFolderTests
             Throws.TypeOf<InvalidOperationException>());
         Assert.That(File.Exists(Path.Combine(folder.ScriptsPath, "depot_100012.vdf")), Is.False);
     }
+
+    [Test]
+    public void CreateAppBuildScript_LeavesNoDepotScriptWhenTheAppScriptCannotBeWritten()
+    {
+        using TemporaryContentBuilderFolder folder = new TemporaryContentBuilderFolder();
+        Directory.CreateDirectory(Path.Combine(folder.ScriptsPath, "app_100030.vdf"));
+        ContentBuilderFolder contentBuilder = new ContentBuilderFolder(folder.ContentBuilderPath);
+
+        Assert.That(() => contentBuilder.CreateAppBuildScript("100030", new[] { "100031", "100032" }),
+            Throws.InstanceOf<IOException>().Or.InstanceOf<UnauthorizedAccessException>());
+
+        Assert.That(Directory.GetFiles(folder.ScriptsPath), Is.Empty);
+    }
 }
