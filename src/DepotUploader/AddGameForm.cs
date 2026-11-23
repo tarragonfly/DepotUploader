@@ -74,7 +74,7 @@ internal sealed class AddGameForm : Form
         layout.Controls.Add(field, 1, row);
     }
 
-    private static bool IsNumber(string text)
+    public static bool IsNumber(string text)
     {
         return text.Length > 0 && text.All(character => character >= '0' && character <= '9');
     }

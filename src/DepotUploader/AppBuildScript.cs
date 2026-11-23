@@ -3,16 +3,17 @@ namespace DepotUploader;
 internal sealed class AppBuildScript
 {
     private readonly BuildScriptFile _scriptFile;
+    private readonly List<DepotBuildScript> _depots;
 
     private AppBuildScript(BuildScriptFile scriptFile, List<DepotBuildScript> depots)
     {
         _scriptFile = scriptFile;
-        Depots = depots;
+        _depots = depots;
     }
 
     public string FilePath => _scriptFile.FilePath;
 
-    public IReadOnlyList<DepotBuildScript> Depots { get; }
+    public IReadOnlyList<DepotBuildScript> Depots => _depots;
 
     public string AppId => _scriptFile.Root.GetValue("appid");
 
@@ -84,6 +85,81 @@ internal sealed class AppBuildScript
         return new AppBuildScript(BuildScriptFile.NotYetWritten(filePath, root), depots);
     }
 
+    public string DepotScriptPath(string depotId)
+    {
+        return _scriptFile.AbsolutePath(DepotScriptName(depotId));
+    }
+
+    private static string DepotScriptName(string depotId)
+    {
+        return $"depot_{depotId}.vdf";
+    }
+
+    public DepotBuildScript AddDepotAndSave(string depotId)
+    {
+        KeyValuesNode? depotsBlockInScript = _scriptFile.Root.FindChild("depots");
+        if (_depots.Any(depot => depot.DepotId == depotId) || depotsBlockInScript?.FindChild(depotId) is not null)
+        {
+            throw new InvalidOperationException($"Depot {depotId} is already in {Path.GetFileName(FilePath)}.");
+        }
+
+        string depotScriptPath = DepotScriptPath(depotId);
+        DepotBuildScript depot = File.Exists(depotScriptPath)
+            ? DepotBuildScript.Load(depotScriptPath)
+            : DepotBuildScript.CreateForWholeFolder(depotScriptPath, depotId, string.Empty);
+        if (depot.DepotId != depotId)
+        {
+            throw new InvalidOperationException(
+                $"{Path.GetFileName(depotScriptPath)} already exists and is the script of depot {depot.DepotId}.");
+        }
+
+        KeyValuesNode depotsBlock = depotsBlockInScript ?? new KeyValuesNode("depots");
+        depotsBlock.SetValue(depotId, DepotScriptName(depotId));
+        if (depotsBlockInScript is null)
+        {
+            _scriptFile.Root.Children!.Add(depotsBlock);
+        }
+
+        _depots.Add(depot);
+        try
+        {
+            Save();
+        }
+        catch
+        {
+            _depots.Remove(depot);
+            depotsBlock.Children!.RemoveAt(depotsBlock.Children.Count - 1);
+            if (depotsBlockInScript is null)
+            {
+                _scriptFile.Root.Children!.Remove(depotsBlock);
+            }
+
+            throw;
+        }
+
+        return depot;
+    }
+
+    public void RemoveDepotAndSave(DepotBuildScript depot)
+    {
+        int depotIndex = _depots.IndexOf(depot);
+        List<KeyValuesNode> depotEntries = _scriptFile.Root.FindChild("depots")!.Children!;
+        KeyValuesNode removedDepotEntry = depotEntries[depotIndex];
+        depotEntries.RemoveAt(depotIndex);
+        _depots.RemoveAt(depotIndex);
+        try
+        {
+            Save();
+        }
+        catch
+        {
+            depotEntries.Insert(depotIndex, removedDepotEntry);
+            _depots.Insert(depotIndex, depot);
+
+            throw;
+        }
+    }
+
     public string AbsoluteContentFolder(DepotBuildScript depot)
     {
         return AbsoluteContentFolder(depot, depot.ContentFolder);
@@ -103,8 +179,8 @@ internal sealed class AppBuildScript
 
     public void Save()
     {
-        List<BuildScriptFile> scriptFiles = new List<BuildScriptFile> { _scriptFile };
-        scriptFiles.AddRange(Depots.Select(depot => depot.ScriptFile));
+        List<BuildScriptFile> scriptFiles = Depots.Select(depot => depot.ScriptFile).ToList();
+        scriptFiles.Add(_scriptFile);
 
         List<BuildScriptFile> editedScriptFiles = scriptFiles.Where(scriptFile => scriptFile.HasUnsavedEdits).ToList();
         List<(string FilePath, string Text)> editedScripts = editedScriptFiles

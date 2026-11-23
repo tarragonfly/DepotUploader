@@ -20,6 +20,8 @@ internal sealed class MainForm : Form
     private readonly TextBox _liveBranchBox = new TextBox { Dock = DockStyle.Fill };
     private readonly CheckBox _uploadsNothingBox = new CheckBox { Text = "Preview only, upload nothing", AutoSize = true };
     private readonly DataGridView _depotGrid = new DataGridView();
+    private readonly Button _addDepotButton = new Button { Text = "Add depot...", AutoSize = true };
+    private readonly Button _removeDepotButton = new Button { Text = "Remove depot", AutoSize = true };
     private readonly Button _browseDepotFolderButton = new Button { Text = "Choose content folder...", AutoSize = true };
     private readonly Button _saveButton = new Button { Text = "Save", AutoSize = true };
     private readonly Button _uploadButton = new Button { Text = "Upload", AutoSize = true };
@@ -146,12 +148,16 @@ internal sealed class MainForm : Form
         });
         _depotGrid.CellEndEdit += (_, cell) => ShowContentSummary(_depotGrid.Rows[cell.RowIndex]);
 
+        _addDepotButton.Click += (_, _) => AddDepot();
+        _removeDepotButton.Click += (_, _) => RemoveSelectedDepot();
         _browseDepotFolderButton.Click += (_, _) => BrowseDepotContentFolder();
         _saveButton.Click += (_, _) => SaveShownGame();
         _uploadButton.Click += async (_, _) => await UploadShownGameAsync();
         _stopButton.Click += (_, _) => _uploadCancellation?.Cancel();
 
         FlowLayoutPanel buttons = new FlowLayoutPanel { Dock = DockStyle.Fill, AutoSize = true };
+        buttons.Controls.Add(_addDepotButton);
+        buttons.Controls.Add(_removeDepotButton);
         buttons.Controls.Add(_browseDepotFolderButton);
         buttons.Controls.Add(_saveButton);
         buttons.Controls.Add(_uploadButton);
@@ -315,6 +321,8 @@ internal sealed class MainForm : Form
         _liveBranchBox.Enabled = hasGame;
         _uploadsNothingBox.Enabled = hasGame;
         _depotGrid.Enabled = hasGame;
+        _addDepotButton.Enabled = hasGame;
+        _removeDepotButton.Enabled = hasGame;
         _browseDepotFolderButton.Enabled = hasGame;
         _saveButton.Enabled = hasGame;
         _uploadButton.Enabled = hasGame && _uploadCancellation is null;
@@ -337,10 +345,95 @@ internal sealed class MainForm : Form
         _uploadsNothingBox.Checked = game.UploadsNothing;
         foreach (DepotBuildScript depot in game.Depots)
         {
-            DataGridViewRow row = _depotGrid.Rows[_depotGrid.Rows.Add(depot.DepotId, depot.ContentFolder, string.Empty)];
-            row.Tag = depot;
-            ShowContentSummary(row);
+            AddDepotRow(depot);
         }
+    }
+
+    private DataGridViewRow AddDepotRow(DepotBuildScript depot)
+    {
+        DataGridViewRow row = _depotGrid.Rows[_depotGrid.Rows.Add(depot.DepotId, depot.ContentFolder, string.Empty)];
+        row.Tag = depot;
+        ShowContentSummary(row);
+
+        return row;
+    }
+
+    private void AddDepot()
+    {
+        if (_shownGame is null)
+        {
+            return;
+        }
+
+        using AddDepotForm dialog = new AddDepotForm();
+        if (dialog.ShowDialog(this) != DialogResult.OK)
+        {
+            return;
+        }
+
+        AppBuildScript game = _shownGame;
+        string depotScriptPath = game.DepotScriptPath(dialog.DepotId);
+        bool usesExistingDepotScript = File.Exists(depotScriptPath);
+        DepotBuildScript depot;
+        try
+        {
+            depot = game.AddDepotAndSave(dialog.DepotId);
+        }
+        catch (Exception exception) when (exception is InvalidOperationException or FormatException or IOException
+            or UnauthorizedAccessException)
+        {
+            MessageBox.Show(this, $"The depot was not added. {exception.Message}", Text, MessageBoxButtons.OK,
+                MessageBoxIcon.Warning);
+
+            return;
+        }
+
+        _depotGrid.CurrentCell = AddDepotRow(depot).Cells[ContentFolderColumn];
+        AppendLog($"Added depot {depot.DepotId} to {Path.GetFileName(game.FilePath)}. " + (usesExistingDepotScript
+            ? $"It uses the {Path.GetFileName(depotScriptPath)} that was already in the scripts folder."
+            : $"Wrote {Path.GetFileName(depotScriptPath)}."));
+    }
+
+    private void RemoveSelectedDepot()
+    {
+        _depotGrid.EndEdit();
+        DataGridViewRow? row = _depotGrid.CurrentRow;
+        if (_shownGame is null || row is null)
+        {
+            return;
+        }
+
+        AppBuildScript game = _shownGame;
+        DepotBuildScript depot = DepotInRow(row);
+        string depotScriptName = Path.GetFileName(depot.FilePath);
+        string depotScriptPathAddDepotUses = game.DepotScriptPath(depot.DepotId);
+        string whereTheDepotScriptStays = string.Equals(depot.FilePath, depotScriptPathAddDepotUses,
+            StringComparison.OrdinalIgnoreCase)
+            ? $"{depotScriptName} stays in the scripts folder."
+            : $"Its script stays at {depot.FilePath}. Add depot... can't add that script back, because it only uses "
+            + $"{Path.GetFileName(depotScriptPathAddDepotUses)} next to the app script.";
+        if (MessageBox.Show(this,
+                $"Remove depot {depot.DepotId} from {_settings.GameName(game.AppId)} ({game.AppId})? "
+                + whereTheDepotScriptStays,
+                Text, MessageBoxButtons.OKCancel, MessageBoxIcon.Question) != DialogResult.OK)
+        {
+            return;
+        }
+
+        try
+        {
+            game.RemoveDepotAndSave(depot);
+        }
+        catch (Exception exception) when (exception is FormatException or IOException or UnauthorizedAccessException)
+        {
+            MessageBox.Show(this, $"The depot was not removed. {exception.Message}", Text, MessageBoxButtons.OK,
+                MessageBoxIcon.Warning);
+
+            return;
+        }
+
+        _depotGrid.Rows.Remove(row);
+        AppendLog($"Removed depot {depot.DepotId} from {Path.GetFileName(game.FilePath)}. {depotScriptName} was kept.");
     }
 
     private static DepotBuildScript DepotInRow(DataGridViewRow row)
