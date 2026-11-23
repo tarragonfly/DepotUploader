@@ -41,7 +41,7 @@ internal sealed class MainForm : Form
 
     public MainForm()
     {
-        _settings = UploaderSettings.Load(_settingsPath);
+        _settings = UploaderSettings.Load(_settingsPath, out string? settingsLoadError);
 
         AutoScaleDimensions = new SizeF(96f, 96f);
         AutoScaleMode = AutoScaleMode.Dpi;
@@ -69,6 +69,11 @@ internal sealed class MainForm : Form
 
         _contentBuilderPathBox.Text = _settings.ContentBuilderPath;
         _steamLoginBox.Text = _settings.SteamLogin;
+        if (settingsLoadError is not null)
+        {
+            AppendLog(settingsLoadError);
+        }
+
         _gameList.SelectedIndexChanged += (_, _) => SwitchToSelectedGame();
         FormClosing += (_, _) => StopUploadAndSaveSettings();
         Shown += (_, _) => ReloadGames();
