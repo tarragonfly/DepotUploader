@@ -23,7 +23,7 @@ dotnet publish src/DepotUploader -c Release -o publish
 publish\DepotUploader.exe
 ```
 
-This is the release build: one exe of about 67 KB that targets `net48`, with no other files. Run the tests with `dotnet test`.
+This is the release build: one exe of about 68 KB that targets `net48`, with no other files. Run the tests with `dotnet test`.
 
 ## Use
 
