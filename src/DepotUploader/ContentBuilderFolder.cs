@@ -47,7 +47,7 @@ internal sealed class ContentBuilderFolder
                 scripts.Add(AppBuildScript.Load(file));
             }
             catch (Exception exception) when (exception is FormatException or IOException
-                or UnauthorizedAccessException)
+                or UnauthorizedAccessException or ArgumentException or NotSupportedException)
             {
                 scriptLoadErrors.Add($"{Path.GetFileName(file)}: {exception.Message}");
             }

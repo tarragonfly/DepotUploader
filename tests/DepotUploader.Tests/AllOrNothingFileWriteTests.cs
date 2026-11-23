@@ -16,9 +16,9 @@ public class AllOrNothingFileWriteTests
 
         AllOrNothingFileWrite.WriteAll(new[] { (replacedPath, "new app text"), (newPath, "new depot text") });
 
-        Assert.That(File.ReadAllBytes(replacedPath), Is.EqualTo("new app text"u8.ToArray()));
-        Assert.That(File.ReadAllBytes(newPath), Is.EqualTo("new depot text"u8.ToArray()));
-        Assert.That(Directory.GetFiles(folder.ScriptsPath).Order(), Is.EqualTo(new[] { replacedPath, newPath }));
+        Assert.That(File.ReadAllBytes(replacedPath), Is.EqualTo(Encoding.UTF8.GetBytes("new app text")));
+        Assert.That(File.ReadAllBytes(newPath), Is.EqualTo(Encoding.UTF8.GetBytes("new depot text")));
+        Assert.That(Directory.GetFiles(folder.ScriptsPath).OrderBy(path => path), Is.EqualTo(new[] { replacedPath, newPath }));
     }
 
     [Test]
@@ -38,7 +38,7 @@ public class AllOrNothingFileWriteTests
         Assert.That(TestFileMetadata.AccessRulesOf(filePath), Is.EqualTo(accessRulesBefore));
         Assert.That(accessRulesBefore, Is.Not.EqualTo(TestFileMetadata.AccessRulesOf(fileWithFolderRulesPath)));
         Assert.That(TestFileMetadata.ReadAlternateStream(filePath), Is.EqualTo(TestFileMetadata.AlternateStreamBytes));
-        Assert.That(Directory.GetFiles(folder.ScriptsPath).Order(),
+        Assert.That(Directory.GetFiles(folder.ScriptsPath).OrderBy(path => path),
             Is.EqualTo(new[] { filePath, fileWithFolderRulesPath }));
     }
 
@@ -162,7 +162,7 @@ public class AllOrNothingFileWriteTests
         Assert.That(File.Exists(newPath), Is.False);
         Assert.That(File.ReadAllText(newPath + ".previous"), Is.EqualTo("text of another writer"));
         Assert.That(File.ReadAllText(heldPath), Is.EqualTo("old depot text"));
-        Assert.That(Directory.GetFiles(folder.ScriptsPath).Order(),
+        Assert.That(Directory.GetFiles(folder.ScriptsPath).OrderBy(path => path),
             Is.EqualTo(new[] { replacedPath, newPath + ".previous", heldPath }));
     }
 
@@ -263,14 +263,15 @@ public class AllOrNothingFileWriteTests
         Assert.That(File.ReadAllText(movedAsidePath), Is.EqualTo("old second depot text"));
         Assert.That(Directory.GetFiles(folder.ScriptsPath), Has.Length.EqualTo(4));
 
-        File.Move(keptBackupPath, heldAfterReplacePath, overwrite: true);
+        File.Delete(heldAfterReplacePath);
+        File.Move(keptBackupPath, heldAfterReplacePath);
         Assert.That(File.ReadAllBytes(heldAfterReplacePath), Is.EqualTo(heldBytesBefore));
         AllOrNothingFileWrite.WriteAll(files);
 
         Assert.That(File.ReadAllText(heldAfterReplacePath), Is.EqualTo("new app text"));
         Assert.That(File.ReadAllText(restoredPath), Is.EqualTo("new first depot text"));
         Assert.That(File.ReadAllText(movedAsidePath), Is.EqualTo("new second depot text"));
-        Assert.That(Directory.GetFiles(folder.ScriptsPath).Order(),
+        Assert.That(Directory.GetFiles(folder.ScriptsPath).OrderBy(path => path),
             Is.EqualTo(new[] { heldAfterReplacePath, restoredPath, movedAsidePath }));
     }
 

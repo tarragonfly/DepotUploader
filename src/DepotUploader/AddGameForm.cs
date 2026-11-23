@@ -11,6 +11,7 @@ internal sealed class AddGameForm : Form
         AutoScaleDimensions = new SizeF(96f, 96f);
         AutoScaleMode = AutoScaleMode.Dpi;
         Text = "Add game";
+        Font = SystemFonts.MessageBoxFont;
         FormBorderStyle = FormBorderStyle.FixedDialog;
         StartPosition = FormStartPosition.CenterParent;
         MaximizeBox = false;
@@ -58,7 +59,7 @@ internal sealed class AddGameForm : Form
         get
         {
             List<string> depotIds = new List<string>();
-            foreach (string part in _depotIdsBox.Text.Split(',', StringSplitOptions.RemoveEmptyEntries))
+            foreach (string part in _depotIdsBox.Text.Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries))
             {
                 depotIds.Add(part.Trim());
             }
@@ -75,7 +76,7 @@ internal sealed class AddGameForm : Form
 
     private static bool IsNumber(string text)
     {
-        return text.Length > 0 && text.All(char.IsAsciiDigit);
+        return text.Length > 0 && text.All(character => character >= '0' && character <= '9');
     }
 
     private void CloseWhenValid()

@@ -46,6 +46,7 @@ internal sealed class MainForm : Form
         AutoScaleDimensions = new SizeF(96f, 96f);
         AutoScaleMode = AutoScaleMode.Dpi;
         Text = "Depot Uploader";
+        Font = SystemFonts.MessageBoxFont;
         ClientSize = new Size(1100, 760);
         MinimumSize = new Size(800, 600);
         StartPosition = FormStartPosition.CenterScreen;
@@ -196,15 +197,12 @@ internal sealed class MainForm : Form
 
     private void BrowseContentBuilderFolder()
     {
-        using FolderBrowserDialog dialog = new FolderBrowserDialog
+        string? pickedFolder = FolderPicker.Show(this,
+            "Choose the ContentBuilder folder of the Steamworks SDK (sdk\\tools\\ContentBuilder)",
+            _contentBuilderPathBox.Text);
+        if (pickedFolder is not null)
         {
-            Description = "Choose the ContentBuilder folder of the Steamworks SDK (sdk\\tools\\ContentBuilder)",
-            UseDescriptionForTitle = true,
-            InitialDirectory = _contentBuilderPathBox.Text,
-        };
-        if (dialog.ShowDialog(this) == DialogResult.OK)
-        {
-            _contentBuilderPathBox.Text = dialog.SelectedPath;
+            _contentBuilderPathBox.Text = pickedFolder;
             ReloadGames();
         }
     }
@@ -222,6 +220,14 @@ internal sealed class MainForm : Form
         {
             ShowGame(null);
             AppendLog("Choose the ContentBuilder folder of the Steamworks SDK to list its games.");
+
+            return;
+        }
+
+        if (folderPath.IndexOfAny(Path.GetInvalidPathChars()) >= 0)
+        {
+            ShowGame(null);
+            AppendLog($"{folderPath} is not a folder path.");
 
             return;
         }
@@ -378,15 +384,12 @@ internal sealed class MainForm : Form
             return;
         }
 
-        using FolderBrowserDialog dialog = new FolderBrowserDialog
+        string? pickedFolder = FolderPicker.Show(this,
+            $"Choose the build folder to upload to depot {DepotInRow(row).DepotId}",
+            _shownGame!.AbsoluteContentFolder(DepotInRow(row), ContentFolderInRow(row)));
+        if (pickedFolder is not null)
         {
-            Description = $"Choose the build folder to upload to depot {DepotInRow(row).DepotId}",
-            UseDescriptionForTitle = true,
-            InitialDirectory = _shownGame!.AbsoluteContentFolder(DepotInRow(row), ContentFolderInRow(row)),
-        };
-        if (dialog.ShowDialog(this) == DialogResult.OK)
-        {
-            row.Cells[ContentFolderColumn].Value = dialog.SelectedPath;
+            row.Cells[ContentFolderColumn].Value = pickedFolder;
             ShowContentSummary(row);
         }
     }
@@ -615,6 +618,10 @@ internal sealed class MainForm : Form
         {
             AppendLog("Stopped steamcmd.");
         }
+        catch (SteamCmdNotStoppedException exception)
+        {
+            AppendLog(exception.Message);
+        }
         catch (Exception exception) when (exception is IOException or InvalidOperationException
             or Win32Exception)
         {
@@ -690,7 +697,8 @@ internal sealed class MainForm : Form
             if (newText.Length > 0)
             {
                 AppendLog($"{Path.GetFileName(buildLogPath)}:");
-                AppendLog(newText.ReplaceLineEndings());
+                AppendLog(newText.Replace("\r\n", "\n").Replace('\r', '\n')
+                    .Replace("\n", Environment.NewLine));
             }
         }
         catch (IOException exception)

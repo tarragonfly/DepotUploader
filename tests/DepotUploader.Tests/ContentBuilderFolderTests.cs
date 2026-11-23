@@ -36,6 +36,20 @@ public class ContentBuilderFolderTests
     }
 
     [Test]
+    public void LoadAppBuildScripts_LoadsTheOtherGamesWhenADepotScriptPathIsNotAPath()
+    {
+        using TemporaryContentBuilderFolder folder = new TemporaryContentBuilderFolder();
+        folder.WriteAppAndDepotScriptsLikeSteamPipeGui("100010", "100011", "E:\\content\\FirstGame");
+        folder.WriteScript("app_999.vdf", "\"appbuild\" { \"appid\" \"999\" \"depots\" { \"1000\" \"depot|1000.vdf\" } }");
+
+        List<AppBuildScript> games = new ContentBuilderFolder(folder.ContentBuilderPath)
+            .LoadAppBuildScripts(out List<string> scriptLoadErrors);
+
+        Assert.That(games.Select(game => game.AppId), Is.EqualTo(new[] { "100010" }));
+        Assert.That(scriptLoadErrors, Has.Exactly(1).StartsWith("app_999.vdf: "));
+    }
+
+    [Test]
     public void Save_WritesTheEditedValuesAndKeepsTheOtherKeys()
     {
         using TemporaryContentBuilderFolder folder = new TemporaryContentBuilderFolder();

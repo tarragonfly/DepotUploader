@@ -1,3 +1,5 @@
+using System.ComponentModel;
+using System.Runtime.InteropServices;
 using System.Security.AccessControl;
 using System.Text;
 
@@ -5,6 +7,10 @@ namespace DepotUploader;
 
 internal static class AllOrNothingFileWrite
 {
+    private const int MoveFileReplaceExisting = 1;
+    private const int MoveFileCopyAllowed = 2;
+    private const int AccessDeniedError = 5;
+
     private static readonly UTF8Encoding Utf8WithoutByteOrderMark = new UTF8Encoding(false);
 
     public static void WriteAll(IReadOnlyList<(string FilePath, string Text)> files)
@@ -35,7 +41,7 @@ internal static class AllOrNothingFileWrite
                 }
                 else
                 {
-                    File.Move(stagedFile.StagedFilePath, stagedFile.FilePath, overwrite: false);
+                    File.Move(stagedFile.StagedFilePath, stagedFile.FilePath);
                 }
 
                 committedFiles.Add(stagedFile);
@@ -106,7 +112,8 @@ internal static class AllOrNothingFileWrite
 
             using FileStream stagedFile = new FileStream(stagedFilePath, FileMode.Open, FileAccess.Write,
                 FileShare.None);
-            stagedFile.Write(Utf8WithoutByteOrderMark.GetBytes(text));
+            byte[] textBytes = Utf8WithoutByteOrderMark.GetBytes(text);
+            stagedFile.Write(textBytes, 0, textBytes.Length);
             stagedFile.Flush(flushToDisk: true);
         }
         catch
@@ -193,7 +200,7 @@ internal static class AllOrNothingFileWrite
                 return;
             }
 
-            File.Move(fileBeingReplaced.BackupFilePath, fileBeingReplaced.FilePath, overwrite: false);
+            File.Move(fileBeingReplaced.BackupFilePath, fileBeingReplaced.FilePath);
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
         {
@@ -207,7 +214,7 @@ internal static class AllOrNothingFileWrite
         {
             if (committedFile.ReplacesExistingFile)
             {
-                File.Move(committedFile.BackupFilePath, committedFile.FilePath, overwrite: true);
+                MoveOverExistingFile(committedFile.BackupFilePath, committedFile.FilePath);
             }
             else
             {
@@ -220,6 +227,24 @@ internal static class AllOrNothingFileWrite
                 ? KeptBackupText(committedFile)
                 : $"{committedFile.FilePath} could not be removed.");
         }
+    }
+
+    private static void MoveOverExistingFile(string sourceFilePath, string targetFilePath)
+    {
+        if (MoveFileEx(Path.GetFullPath(sourceFilePath), Path.GetFullPath(targetFilePath),
+                MoveFileReplaceExisting | MoveFileCopyAllowed))
+        {
+            return;
+        }
+
+        int error = Marshal.GetLastWin32Error();
+        string message = $"{new Win32Exception(error).Message} ({sourceFilePath})";
+        if (error == AccessDeniedError)
+        {
+            throw new UnauthorizedAccessException(message);
+        }
+
+        throw new IOException(message, unchecked((int)0x80070000 | error));
     }
 
     private static string KeptBackupText(StagedFile stagedFile)
@@ -239,6 +264,9 @@ internal static class AllOrNothingFileWrite
             return;
         }
     }
+
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    private static extern bool MoveFileEx(string existingFilePath, string newFilePath, int flags);
 
     private sealed record StagedFile(string FilePath, string StagedFilePath, string BackupFilePath,
         bool ReplacesExistingFile);

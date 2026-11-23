@@ -52,6 +52,6 @@ internal static class TestFileMetadata
 
     private static string AlternateStreamPath(string filePath)
     {
-        return filePath + ":note";
+        return $@"\\?\{Path.GetFullPath(filePath)}:note";
     }
 }
