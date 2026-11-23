@@ -27,15 +27,15 @@ This is the release build: one exe of about 64 KB that targets `net48`, with no 
 
 ## Use
 
-1. Choose the `ContentBuilder` folder and enter your Steam login name.
+1. At the bottom of the window, choose the `ContentBuilder` folder and enter your Steam login name.
 2. Click **Sign in...** once. steamcmd opens in its own window and asks for your password and Steam Guard code there. steamcmd saves the sign-in for later uploads.
 3. Select a game, set the build description and the content folder of each depot, then click **Upload**.
 
 The game list shows every `app_<appid>.vdf` in `ContentBuilder\scripts`. These are the scripts SteamPipe GUI writes, and both tools can edit them. When an app script can't be read, the log names it and the other games still load. **Add game...** writes a new `app_<appid>.vdf` and one `depot_<depotid>.vdf` per depot. Each depot uploads its whole content folder except `*.pdb` files.
 
-**Add depot...** adds a depot to the selected game. It writes `depot_<depotid>.vdf` next to the app script and adds the depot to the `depots` block of the app script. When `depot_<depotid>.vdf` already exists, the tool uses that file and doesn't write it. **Remove** in a depot row removes that depot from the `depots` block. It keeps `depot_<depotid>.vdf`, and adding the depot again uses that file with its content folder. Both buttons write the scripts immediately, without **Save**. Your other unsaved edits stay in the window and are not written.
+**Add depot...** adds a depot to the selected game. It writes `depot_<depotid>.vdf` next to the app script and adds the depot to the `depots` block of the app script. When `depot_<depotid>.vdf` already exists, the tool uses that file and doesn't write it. **X** at the end of a depot row removes that depot from the `depots` block. It keeps `depot_<depotid>.vdf`, and adding the depot again uses that file with its content folder. Both buttons write the scripts immediately, without **Save**. Your other unsaved edits stay in the window and are not written.
 
-**Add depot...** only uses `depot_<depotid>.vdf` next to the app script. A depot script with another name or in another folder still loads and uploads. After **Remove** you have to add it back to the `depots` block by hand, and the **Remove** confirmation shows its path.
+**Add depot...** only uses `depot_<depotid>.vdf` next to the app script. A depot script with another name or in another folder still loads and uploads. After you remove such a depot with **X**, you have to add it back to the `depots` block by hand, and the confirmation shows the path of its script.
 
 **Save** writes only the scripts you edited, and it writes all of them or none. When a script changed on disk after the tool loaded it, **Save** writes nothing and names the script. Click **Reload** to read the scripts again. **Reload** discards the edits in the window.
 
