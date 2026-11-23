@@ -78,6 +78,81 @@ public class AppBuildScriptTests
     }
 
     [Test]
+    public void AbsoluteContentFolder_PutsAFolderThatStartsWithOneSeparatorOnTheDriveOfTheScript()
+    {
+        using TemporaryContentBuilderFolder folder = new TemporaryContentBuilderFolder();
+        AppBuildScript game = AppBuildScript.Load(WriteScriptsWithRelativePaths(folder));
+
+        Assert.That(game.AbsoluteContentFolder(game.Depots[0], @"\builds\windows"),
+            Is.EqualTo(Path.GetPathRoot(folder.ScriptsPath) + @"builds\windows"));
+    }
+
+    [Test]
+    public void AbsoluteContentFolder_ResolvesParentFoldersWhenTheScriptPathHasTheExtendedLengthPrefix()
+    {
+        using TemporaryContentBuilderFolder folder = new TemporaryContentBuilderFolder();
+        Directory.CreateDirectory(Path.Combine(folder.ContentBuilderPath, "content"));
+        AppBuildScript game = AppBuildScript.Load(@"\\?\" + WriteScriptsWithRelativePaths(folder));
+
+        string absoluteFolder = game.AbsoluteContentFolder(game.Depots[0]);
+
+        Assert.That(absoluteFolder, Is.EqualTo(@"\\?\" + Path.Combine(folder.ContentBuilderPath, "content")));
+        Assert.That(ContentFolderSummary.Describe(absoluteFolder), Is.EqualTo("Empty folder"));
+        Assert.That(game.Depots[1].FilePath, Is.EqualTo(@"\\?\" + Path.Combine(folder.ScriptsPath, "depot_2.vdf")));
+    }
+
+    [TestCase(@"\\?\C:\Depot\scripts\depot_1.vdf", @"..\content", @"\\?\C:\Depot\content")]
+    [TestCase(@"\\?\C:\Depot\scripts\depot_1.vdf", @"..\..\..\content", @"\\?\C:\content")]
+    [TestCase(@"\\?\C:\Depot\scripts\depot_1.vdf", @"..\.\content.", @"\\?\C:\Depot\content.")]
+    [TestCase(@"\\?\C:\Depot\scripts\depot_1.vdf", "../content/windows", @"\\?\C:\Depot\content\windows")]
+    [TestCase(@"\\?\C:\Depot\scripts\depot_1.vdf", "depot_2.vdf", @"\\?\C:\Depot\scripts\depot_2.vdf")]
+    [TestCase(@"\\?\C:\Depot\scripts\depot_1.vdf", @"\\?\D:\builds\windows", @"\\?\D:\builds\windows")]
+    [TestCase(@"\\?\C:\Depot\scripts\depot_1.vdf", @"D:\builds\..\windows", @"D:\windows")]
+    [TestCase(@"\\?\UNC\server\share\Depot\scripts\depot_1.vdf", @"..\content", @"\\?\UNC\server\share\Depot\content")]
+    [TestCase(@"\\?\UNC\server\share\Depot\scripts\depot_1.vdf", @"..\..\..\..\content",
+        @"\\?\UNC\server\share\content")]
+    [TestCase(@"\\?\C:\Depot\scripts\depot_1.vdf", @"C:..\content", @"\\?\C:\Depot\content")]
+    [TestCase(@"\\?\C:\Depot\scripts\depot_1.vdf", @"D:builds\content.", @"\\?\D:\builds\content.")]
+    [TestCase(@"\\?\UNC\server\share\Depot\scripts\depot_1.vdf", @"D:builds\windows", @"\\?\D:\builds\windows")]
+    [TestCase(@"C:\Depot\scripts\depot_1.vdf", @"D:builds\windows", @"D:\builds\windows")]
+    [TestCase(@"\\?\C:\Depot\scripts\depot_1.vdf", @"\content", @"\\?\C:\content")]
+    [TestCase(@"C:\Depot\scripts\depot_1.vdf", @"C:..\content", @"C:\Depot\content")]
+    [TestCase(@"C:\Depot\scripts\depot_1.vdf", @"..\content", @"C:\Depot\content")]
+    public void AbsolutePath_ResolvesParentFoldersAndKeepsTheExtendedLengthPrefix(string scriptPath,
+        string pathInScript, string expected)
+    {
+        BuildScriptFile script = BuildScriptFile.NotYetWritten(scriptPath, new KeyValuesNode("DepotBuildConfig"));
+
+        Assert.That(script.AbsolutePath(pathInScript), Is.EqualTo(expected));
+    }
+
+    [Test]
+    public void AbsolutePath_KeepsTheExtendedLengthPrefixOfAPathLongerThanMaxPath()
+    {
+        BuildScriptFile script = BuildScriptFile.NotYetWritten(@"\\?\C:\Depot\scripts\depot_1.vdf",
+            new KeyValuesNode("DepotBuildConfig"));
+        string longFolderName = new string('a', 300);
+
+        Assert.That(script.AbsolutePath($@"..\{longFolderName}\windows"),
+            Is.EqualTo($@"\\?\C:\Depot\{longFolderName}\windows"));
+    }
+
+    [TestCase("builds|windows")]
+    [TestCase("E:\\builds\\<windows>")]
+    [TestCase("E:\\builds:windows")]
+    [TestCase("builds\\win*")]
+    public void AbsoluteContentFolder_ReturnsAFolderThatIsNotAPathAsWritten(string contentFolder)
+    {
+        using TemporaryContentBuilderFolder folder = new TemporaryContentBuilderFolder();
+        AppBuildScript game = AppBuildScript.Load(WriteScriptsWithRelativePaths(folder));
+
+        string absoluteFolder = game.AbsoluteContentFolder(game.Depots[0], contentFolder);
+
+        Assert.That(absoluteFolder, Is.EqualTo(contentFolder));
+        Assert.That(ContentFolderSummary.Describe(absoluteFolder), Is.EqualTo("Folder not found"));
+    }
+
+    [Test]
     public void AbsoluteContentFolder_IsEmptyWhenNeitherScriptSetsAFolder()
     {
         using TemporaryContentBuilderFolder folder = new TemporaryContentBuilderFolder();
