@@ -7,21 +7,29 @@
     <UseWindowsForms>true</UseWindowsForms>
     <ImplicitUsings>enable</ImplicitUsings>
     <Version>1.0.0</Version>
+    <RuntimeIdentifiers>win-x64</RuntimeIdentifiers>
+    <_RequiresILLinkPack>true</_RequiresILLinkPack>
   </PropertyGroup>
 
-  <PropertyGroup>
+  <PropertyGroup Condition="'$(_IsPublishing)' == 'true'">
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
     <PublishSelfContained>true</PublishSelfContained>
     <PublishSingleFile>true</PublishSingleFile>
     <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+    <DebugType>none</DebugType>
     <_SuppressWinFormsTrimError>true</_SuppressWinFormsTrimError>
   </PropertyGroup>
 
-  <PropertyGroup Condition="'$(PublishSelfContained)' == 'true'">
+  <PropertyGroup Condition="'$(_IsPublishing)' == 'true' And '$(PublishSelfContained)' == 'true' And '$(SelfContained)' != 'false'">
     <PublishTrimmed>true</PublishTrimmed>
     <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
     <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
   </PropertyGroup>
+
+  <ItemGroup>
+    <CoreCompileCache Include="DebugType=$(DebugType)" />
+    <_GeneratePublishDependencyFilePropertyInputsCacheToHash Include="PublishTrimmed=$(PublishTrimmed)" />
+  </ItemGroup>
 
   <ItemGroup>
     <InternalsVisibleTo Include="DepotUploader.Tests" />
