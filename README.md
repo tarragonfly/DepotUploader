@@ -33,6 +33,10 @@ This is the release build: one exe of about 64 KB that targets `net48`, with no 
 
 The game list shows every `app_<appid>.vdf` in `ContentBuilder\scripts`. These are the scripts SteamPipe GUI writes, and both tools can edit them. When an app script can't be read, the log names it and the other games still load. **Add game...** writes a new `app_<appid>.vdf` and one `depot_<depotid>.vdf` per depot. Each depot uploads its whole content folder except `*.pdb` files.
 
+**Add depot...** adds a depot to the selected game. It writes `depot_<depotid>.vdf` next to the app script and adds the depot to the `depots` block of the app script. When `depot_<depotid>.vdf` already exists, the tool uses that file and doesn't write it. **Remove** in a depot row removes that depot from the `depots` block. It keeps `depot_<depotid>.vdf`, and adding the depot again uses that file with its content folder. Both buttons write the scripts immediately, without **Save**. Your other unsaved edits stay in the window and are not written.
+
+**Add depot...** only uses `depot_<depotid>.vdf` next to the app script. A depot script with another name or in another folder still loads and uploads. After **Remove** you have to add it back to the `depots` block by hand, and the **Remove** confirmation shows its path.
+
 **Save** writes only the scripts you edited, and it writes all of them or none. When a script changed on disk after the tool loaded it, **Save** writes nothing and names the script. Click **Reload** to read the scripts again. **Reload** discards the edits in the window.
 
 **Upload** saves the scripts, asks you to confirm, then runs steamcmd on copies of the scripts in a temporary folder. The copies use absolute paths. Editing a script while steamcmd runs doesn't change that upload.
@@ -44,7 +48,7 @@ The game list shows every `app_<appid>.vdf` in `ContentBuilder\scripts`. These a
 | Preview only, upload nothing | `preview` | steamcmd builds the depot manifests and uploads nothing |
 | Content folder | `contentroot` in the depot script | The build folder that goes into the depot. Leave it empty to use `contentroot` of the app script. |
 
-A relative content folder is relative to the folder of its script. The Contents column shows the file count, total size and newest file time of each content folder. The confirmation before an upload shows the same numbers and the absolute path of each folder.
+Type the content folder into its cell or pick it with **Browse...** in the same row. A relative content folder is relative to the folder of its script. The Contents column shows the file count, total size and newest file time of each content folder. The confirmation before an upload shows the same numbers and the absolute path of each folder.
 
 After steamcmd exits, the log shows its exit code and the lines it added to `ContentBuilder\output\app_build_<appid>.log`.
 
