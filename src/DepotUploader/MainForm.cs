@@ -62,12 +62,12 @@ internal sealed class MainForm : Form
 
         TableLayoutPanel windowLayout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 3 };
         windowLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        windowLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         windowLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 60));
         windowLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 40));
-        windowLayout.Controls.Add(BuildSteamSetupPanel(), 0, 0);
-        windowLayout.Controls.Add(gamesAndDetails, 0, 1);
-        windowLayout.Controls.Add(_logBox, 0, 2);
+        windowLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        windowLayout.Controls.Add(gamesAndDetails, 0, 0);
+        windowLayout.Controls.Add(_logBox, 0, 1);
+        windowLayout.Controls.Add(BuildSteamSetupPanel(), 0, 2);
         Controls.Add(windowLayout);
 
         _contentBuilderPathBox.Text = _settings.ContentBuilderPath;
