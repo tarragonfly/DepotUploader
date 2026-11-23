@@ -66,6 +66,26 @@ public class AppBuildScriptTests
     }
 
     [Test]
+    public void UndoUnsavedEdits_RemovesTheKeyAnEditAddedToADepotScript()
+    {
+        using TemporaryContentBuilderFolder folder = new TemporaryContentBuilderFolder();
+        string appScriptPath = folder.WriteAppAndDepotScriptsLikeSteamPipeGui("100010", "100011", "E:\\old");
+        string depotScriptPath = folder.WriteScript("depot_100011.vdf",
+            "\"DepotBuildConfig\"\r\n{\r\n\t\"DepotID\" \"100011\"\r\n}");
+        string depotTextBefore = File.ReadAllText(depotScriptPath);
+        AppBuildScript game = AppBuildScript.Load(appScriptPath);
+        game.Depots[0].ContentFolder = "E:\\folder with a \" in its name";
+        Assert.That(() => game.Save(), Throws.TypeOf<FormatException>());
+
+        game.UndoUnsavedEdits();
+        game.Description = "1.1";
+        game.Save();
+
+        Assert.That(File.ReadAllText(depotScriptPath), Is.EqualTo(depotTextBefore));
+        Assert.That(AppBuildScript.Load(appScriptPath).Description, Is.EqualTo("1.1"));
+    }
+
+    [Test]
     public void AddDepotAndSave_WritesTheDepotScriptAndItsLineInTheAppScript()
     {
         using TemporaryContentBuilderFolder folder = new TemporaryContentBuilderFolder();

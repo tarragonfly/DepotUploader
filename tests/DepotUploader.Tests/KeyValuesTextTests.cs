@@ -48,6 +48,21 @@ public class KeyValuesTextTests
     }
 
     [Test]
+    public void Write_ThenParse_KeepsAValueThatIsOneBrace()
+    {
+        KeyValuesNode root = new KeyValuesNode("appbuild");
+        root.SetValue("desc", "}");
+        root.SetValue("setlive", "{");
+        root.SetValue("preview", "1");
+
+        KeyValuesNode reread = KeyValuesText.Parse(KeyValuesText.Write(root));
+
+        Assert.That(reread.GetValue("desc"), Is.EqualTo("}"));
+        Assert.That(reread.GetValue("setlive"), Is.EqualTo("{"));
+        Assert.That(reread.GetValue("preview"), Is.EqualTo("1"));
+    }
+
+    [Test]
     public void Write_RejectsAValueWithADoubleQuote()
     {
         KeyValuesNode root = new KeyValuesNode("appbuild");
