@@ -15,7 +15,7 @@ internal sealed class BuildScriptFile
 
     public string FilePath { get; }
 
-    public KeyValuesNode Root { get; }
+    public KeyValuesNode Root { get; private set; }
 
     public bool HasUnsavedEdits => _fileTextWhenLastReadOrWritten is null
         || ToScriptText() != KeyValuesText.Write(KeyValuesText.Parse(_fileTextWhenLastReadOrWritten));
@@ -30,6 +30,14 @@ internal sealed class BuildScriptFile
     public static BuildScriptFile NotYetWritten(string filePath, KeyValuesNode root)
     {
         return new BuildScriptFile(filePath, root, null);
+    }
+
+    public void UndoUnsavedEdits()
+    {
+        if (_fileTextWhenLastReadOrWritten is not null)
+        {
+            Root = KeyValuesText.Parse(_fileTextWhenLastReadOrWritten);
+        }
     }
 
     public string ToScriptText()

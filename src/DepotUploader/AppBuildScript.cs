@@ -202,6 +202,16 @@ internal sealed class AppBuildScript
         }
     }
 
+    public void UndoUnsavedEdits()
+    {
+        foreach (DepotBuildScript depot in Depots)
+        {
+            depot.ScriptFile.UndoUnsavedEdits();
+        }
+
+        _scriptFile.UndoUnsavedEdits();
+    }
+
     public string WriteCopiesWithAbsolutePaths(string folderPath)
     {
         KeyValuesNode appCopy = CopyOf(_scriptFile.Root);

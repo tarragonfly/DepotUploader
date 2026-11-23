@@ -23,7 +23,6 @@ internal sealed class MainForm : Form
     private readonly CheckBox _uploadsNothingBox = new CheckBox { Text = "Preview only, upload nothing", AutoSize = true };
     private readonly DataGridView _depotGrid = new DataGridView();
     private readonly Button _addDepotButton = new Button { Text = "Add depot...", AutoSize = true };
-    private readonly Button _saveButton = new Button { Text = "Save", AutoSize = true };
     private readonly Button _uploadButton = new Button { Text = "Upload", AutoSize = true };
     private readonly Button _stopButton = new Button { Text = "Stop", AutoSize = true, Enabled = false };
     private readonly TextBox _logBox = new TextBox
@@ -78,7 +77,7 @@ internal sealed class MainForm : Form
         }
 
         _gameList.SelectedIndexChanged += (_, _) => SwitchToSelectedGame();
-        FormClosing += (_, _) => StopUploadAndSaveSettings();
+        FormClosing += (_, closing) => SaveEditsAndSettingsOrCancelClosing(closing);
         Shown += (_, _) => ReloadGames();
     }
 
@@ -86,7 +85,7 @@ internal sealed class MainForm : Form
     {
         Button browseButton = new Button { Text = "Browse...", AutoSize = true };
         browseButton.Click += (_, _) => BrowseContentBuilderFolder();
-        Button reloadButton = new Button { Text = "Reload", AutoSize = true };
+        Button reloadButton = new Button { Text = "Reload", AutoSize = true, CausesValidation = false };
         reloadButton.Click += (_, _) => ReloadGames();
         Button signInButton = new Button { Text = "Sign in...", AutoSize = true };
         signInButton.Click += (_, _) => OpenSignInConsole();
@@ -98,6 +97,7 @@ internal sealed class MainForm : Form
             ColumnCount = 4,
             RowCount = 2,
             Padding = new Padding(8),
+            CausesValidation = false,
         };
         panel.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
         panel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
@@ -148,17 +148,26 @@ internal sealed class MainForm : Form
             AutoSizeMode = DataGridViewAutoSizeColumnMode.AllCells,
         });
         _depotGrid.Columns.Add(NewDepotRowButtonColumn("X"));
-        _depotGrid.CellEndEdit += (_, cell) => ShowContentSummary(_depotGrid.Rows[cell.RowIndex]);
+        _depotGrid.CellEndEdit += (_, cell) =>
+        {
+            if (_shownGame is not null)
+            {
+                ShowContentSummary(_depotGrid.Rows[cell.RowIndex]);
+                SaveShownGameWhenEdited();
+            }
+        };
         _depotGrid.CellContentClick += (_, cell) => RunDepotRowButton(cell.RowIndex, cell.ColumnIndex);
 
+        _gameNameBox.Validated += (_, _) => SaveShownGameWhenEdited();
+        _descriptionBox.Validated += (_, _) => SaveShownGameWhenEdited();
+        _liveBranchBox.Validated += (_, _) => SaveShownGameWhenEdited();
+        _uploadsNothingBox.Click += (_, _) => SaveShownGameWhenEdited();
         _addDepotButton.Click += (_, _) => AddDepot();
-        _saveButton.Click += (_, _) => SaveShownGame();
         _uploadButton.Click += async (_, _) => await UploadShownGameAsync();
         _stopButton.Click += (_, _) => _uploadCancellation?.Cancel();
 
         FlowLayoutPanel buttons = new FlowLayoutPanel { Dock = DockStyle.Fill, AutoSize = true };
         buttons.Controls.Add(_addDepotButton);
-        buttons.Controls.Add(_saveButton);
         buttons.Controls.Add(_uploadButton);
         buttons.Controls.Add(_stopButton);
 
@@ -322,19 +331,15 @@ internal sealed class MainForm : Form
             return;
         }
 
-        if (_shownGame is not null && HasUnsavedEdits(_shownGame))
+        if (_shownGame is not null && HasUnsavedEdits(_shownGame) && !TrySaveShownGame(out string whyNotSaved))
         {
-            DialogResult answer = MessageBox.Show(this,
-                $"Save the changes to {_settings.GameName(_shownGame.AppId)}?", Text,
-                MessageBoxButtons.YesNoCancel, MessageBoxIcon.Question);
-            if (answer == DialogResult.Cancel || (answer == DialogResult.Yes && !SaveShownGame()))
-            {
-                _ignoreGameSelectionChange = true;
-                _gameList.SelectedIndex = _games.IndexOf(_shownGame);
-                _ignoreGameSelectionChange = false;
+            MessageBox.Show(this, EditsNotSavedMessage(_shownGame, whyNotSaved), Text, MessageBoxButtons.OK,
+                MessageBoxIcon.Warning);
+            _ignoreGameSelectionChange = true;
+            _gameList.SelectedIndex = _games.IndexOf(_shownGame);
+            _ignoreGameSelectionChange = false;
 
-                return;
-            }
+            return;
         }
 
         ShowGame(selectedGame);
@@ -342,6 +347,8 @@ internal sealed class MainForm : Form
 
     private void ShowGame(AppBuildScript? game)
     {
+        _shownGame = null;
+        _depotGrid.Rows.Clear();
         _shownGame = game;
         bool hasGame = game is not null;
         _gameNameBox.Enabled = hasGame;
@@ -350,9 +357,7 @@ internal sealed class MainForm : Form
         _uploadsNothingBox.Enabled = hasGame;
         _depotGrid.Enabled = hasGame;
         _addDepotButton.Enabled = hasGame;
-        _saveButton.Enabled = hasGame;
         _uploadButton.Enabled = hasGame && _uploadCancellation is null;
-        _depotGrid.Rows.Clear();
         if (game is null)
         {
             _gameNameBox.Text = string.Empty;
@@ -364,14 +369,28 @@ internal sealed class MainForm : Form
             return;
         }
 
-        _gameNameBox.Text = _settings.GameName(game.AppId);
         _appIdBox.Text = game.AppId;
-        _descriptionBox.Text = game.Description;
-        _liveBranchBox.Text = game.LiveBranch;
-        _uploadsNothingBox.Checked = game.UploadsNothing;
         foreach (DepotBuildScript depot in game.Depots)
         {
             AddDepotRow(depot);
+        }
+
+        ShowSavedValues(game);
+    }
+
+    private void ShowSavedValues(AppBuildScript game)
+    {
+        _gameNameBox.Text = _settings.GameName(game.AppId);
+        _descriptionBox.Text = game.Description;
+        _liveBranchBox.Text = game.LiveBranch;
+        _uploadsNothingBox.Checked = game.UploadsNothing;
+        foreach (DataGridViewRow row in _depotGrid.Rows)
+        {
+            if (ContentFolderInRow(row) != DepotInRow(row).ContentFolder)
+            {
+                row.Cells[ContentFolderColumn].Value = DepotInRow(row).ContentFolder;
+                ShowContentSummary(row);
+            }
         }
     }
 
@@ -463,7 +482,7 @@ internal sealed class MainForm : Form
 
     private static string ContentFolderInRow(DataGridViewRow row)
     {
-        return (row.Cells[ContentFolderColumn].Value as string ?? string.Empty).Trim();
+        return row.Cells[ContentFolderColumn].Value as string ?? string.Empty;
     }
 
     private async void ShowContentSummary(DataGridViewRow row)
@@ -498,14 +517,15 @@ internal sealed class MainForm : Form
         {
             row.Cells[ContentFolderColumn].Value = pickedFolder;
             ShowContentSummary(row);
+            SaveShownGameWhenEdited();
         }
     }
 
     private bool HasUnsavedEdits(AppBuildScript game)
     {
-        if (_gameNameBox.Text.Trim() != _settings.GameName(game.AppId)
+        if (_gameNameBox.Text != _settings.GameName(game.AppId)
             || _descriptionBox.Text != game.Description
-            || _liveBranchBox.Text.Trim() != game.LiveBranch
+            || _liveBranchBox.Text != game.LiveBranch
             || _uploadsNothingBox.Checked != game.UploadsNothing)
         {
             return true;
@@ -522,26 +542,36 @@ internal sealed class MainForm : Form
         return false;
     }
 
-    private bool SaveShownGame()
+    private void SaveShownGameWhenEdited()
     {
-        if (_shownGame is null)
+        if (_shownGame is not null && HasUnsavedEdits(_shownGame) && !TrySaveShownGame(out string whyNotSaved))
         {
-            return false;
+            AppendLog(EditsNotSavedMessage(_shownGame, whyNotSaved));
+        }
+    }
+
+    private string EditsNotSavedMessage(AppBuildScript game, string whyNotSaved)
+    {
+        return $"The edits to {GameListText(game)} were not saved. {whyNotSaved}";
+    }
+
+    private bool TrySaveShownGame(out string whyNotSaved)
+    {
+        AppBuildScript game = _shownGame!;
+        bool hasEdits = HasUnsavedEdits(game);
+        game.Description = _descriptionBox.Text;
+        if (_liveBranchBox.Text != game.LiveBranch)
+        {
+            game.LiveBranch = _liveBranchBox.Text.Trim();
         }
 
-        _depotGrid.EndEdit();
-        AppBuildScript game = _shownGame;
-        string previousDescription = game.Description;
-        string previousLiveBranch = game.LiveBranch;
-        bool previousUploadsNothing = game.UploadsNothing;
-        List<string> previousContentFolders = game.Depots.Select(depot => depot.ContentFolder).ToList();
-
-        game.Description = _descriptionBox.Text;
-        game.LiveBranch = _liveBranchBox.Text.Trim();
         game.UploadsNothing = _uploadsNothingBox.Checked;
         foreach (DataGridViewRow row in _depotGrid.Rows)
         {
-            DepotInRow(row).ContentFolder = ContentFolderInRow(row);
+            if (ContentFolderInRow(row) != DepotInRow(row).ContentFolder)
+            {
+                DepotInRow(row).ContentFolder = ContentFolderInRow(row).Trim();
+            }
         }
 
         try
@@ -550,41 +580,48 @@ internal sealed class MainForm : Form
         }
         catch (Exception exception) when (exception is FormatException or IOException or UnauthorizedAccessException)
         {
-            game.Description = previousDescription;
-            game.LiveBranch = previousLiveBranch;
-            game.UploadsNothing = previousUploadsNothing;
-            for (int depotIndex = 0; depotIndex < game.Depots.Count; depotIndex++)
-            {
-                game.Depots[depotIndex].ContentFolder = previousContentFolders[depotIndex];
-            }
-
-            MessageBox.Show(this, $"The build scripts were not saved. {exception.Message}", Text,
-                MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            game.UndoUnsavedEdits();
+            whyNotSaved = exception.Message;
 
             return false;
         }
 
-        _settings.GameNamesByAppId[game.AppId] = _gameNameBox.Text.Trim();
-        SaveSettings();
-        _ignoreGameSelectionChange = true;
-        _gameList.Items[_games.IndexOf(game)] = GameListText(game);
-        _ignoreGameSelectionChange = false;
-        AppendLog($"Saved {Path.GetFileName(game.FilePath)} and {game.Depots.Count} depot script(s).");
+        bool savedTheName = true;
+        if (_gameNameBox.Text != _settings.GameName(game.AppId))
+        {
+            _settings.GameNamesByAppId[game.AppId] = _gameNameBox.Text.Trim();
+            savedTheName = SaveSettings();
+            _ignoreGameSelectionChange = true;
+            _gameList.Items[_games.IndexOf(game)] = GameListText(game);
+            _ignoreGameSelectionChange = false;
+        }
+
+        ShowSavedValues(game);
+        if (hasEdits && savedTheName)
+        {
+            AppendLog($"Saved the edits to {GameListText(game)}.");
+        }
+
+        whyNotSaved = string.Empty;
 
         return true;
     }
 
-    private void SaveSettings()
+    private bool SaveSettings()
     {
         _settings.ContentBuilderPath = _contentBuilderPathBox.Text.Trim();
         _settings.SteamLogin = _steamLoginBox.Text.Trim();
         try
         {
             _settings.Save(_settingsPath);
+
+            return true;
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
         {
             AppendLog($"The settings were not saved. {exception.Message}");
+
+            return false;
         }
     }
 
@@ -663,11 +700,21 @@ internal sealed class MainForm : Form
 
     private async Task UploadShownGameAsync()
     {
-        if (_shownGame is null || !CanRunSteamCmdOrExplainWhyNot() || !SaveShownGame())
+        _depotGrid.EndEdit();
+        if (_shownGame is null || !CanRunSteamCmdOrExplainWhyNot())
         {
             return;
         }
 
+        if (!TrySaveShownGame(out string whyNotSaved))
+        {
+            MessageBox.Show(this, $"The upload was not started because the build scripts were not saved. {whyNotSaved}",
+                Text, MessageBoxButtons.OK, MessageBoxIcon.Warning);
+
+            return;
+        }
+
+        SaveSettings();
         AppBuildScript game = _shownGame;
         ContentBuilderFolder contentBuilder = _contentBuilder!;
         foreach (DepotBuildScript depot in game.Depots)
@@ -841,8 +888,19 @@ internal sealed class MainForm : Form
         _logBox.AppendText(text + Environment.NewLine);
     }
 
-    private void StopUploadAndSaveSettings()
+    private void SaveEditsAndSettingsOrCancelClosing(FormClosingEventArgs closing)
     {
+        _depotGrid.EndEdit();
+        if (_shownGame is not null && HasUnsavedEdits(_shownGame) && !TrySaveShownGame(out string whyNotSaved)
+            && MessageBox.Show(this,
+                $"{EditsNotSavedMessage(_shownGame, whyNotSaved)} Close the window and lose the edits?", Text,
+                MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes)
+        {
+            closing.Cancel = true;
+
+            return;
+        }
+
         _uploadCancellation?.Cancel();
         SaveSettings();
     }
