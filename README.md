@@ -23,15 +23,15 @@ dotnet publish src/DepotUploader -c Release -o publish
 publish\DepotUploader.exe
 ```
 
-This is the release build: a self-contained single-file exe for win-x64, trimmed and compressed, 13.8 MB. Run the tests with `dotnet test`.
+This is the release build: a self-contained single-file exe for win-x64, trimmed and compressed, 13.8 MB. The project applies these settings only in `dotnet publish`. `dotnet build`, `dotnet run` and `dotnet test` build a framework-dependent app, so `dotnet publish --no-build` stops with an error. Run the tests with `dotnet test`.
 
 ### Other builds
 
-Add one of these properties to the `dotnet publish` command:
+Add one of these options to the `dotnet publish` command:
 
-| Property | Build | Exe size | Requires |
+| Option | Build | Exe size | Requires |
 |---|---|---|---|
-| `-p:PublishSelfContained=false` | Framework-dependent single file | 0.2 MB | To run: .NET 10 Desktop Runtime |
+| `--self-contained false` | Framework-dependent single file | 0.2 MB | To run: .NET 10 Desktop Runtime |
 | `-p:PublishTrimmed=false` | Self-contained single file, untrimmed | 46.9 MB | |
 | `-p:PublishAot=true` | Native AOT | 17.5 MB | To build: the Visual Studio workload Desktop development with C++, and `vswhere.exe` on `PATH` |
 
@@ -66,7 +66,11 @@ After steamcmd exits, the log shows its exit code and the lines it added to `Con
 - Depots written inside the app script are not supported. Each depot needs its own script file.
 - A depot needs a content folder in its own script or in the app script. The tool doesn't upload a game when one of its depots has neither.
 - Values can't contain a double quote.
-- The game names, the ContentBuilder path and the Steam login name are saved in `%APPDATA%\DepotUploader\settings.json`. The names are labels for the list and are not written to the scripts.
+- The game names, the ContentBuilder path and the Steam login name are saved in `%APPDATA%\DepotUploader\settings.json`. The names are labels for the list and are not written to the scripts. Each window keeps its own copy of the settings and writes the whole file on each save. With two windows open, the last write wins. Edits made to the file while the tool runs are overwritten.
+- When `settings.json` can't be read or isn't valid JSON, the tool starts with empty settings and doesn't write the file. The log names the error. Fix or delete the file, then start the tool again.
+- A save writes the new text to `<file>.<id>.new` and replaces the file with it. The replaced file is kept as `<file>.<id>.previous` until the save is done. When a save fails and the tool can't put a file back, the error names the `.previous` file that holds it. Rename that file to the original name.
+- When `settings.json` is missing and `settings.json.previous` or `settings.json.<id>.previous` exists, the tool starts with empty settings and doesn't save them. Rename the backup to `settings.json`, then start the tool again.
+- Ending the process during **Save** can leave `.new` and `.previous` files, and some scripts with the new text and others with the old text.
 - Comments in a script are removed when the tool saves it.
 
 ## License
