@@ -50,6 +50,22 @@ public class ContentBuilderFolderTests
     }
 
     [Test]
+    public void Save_KeepsTheCreationTimeOfTheAppScript()
+    {
+        using TemporaryContentBuilderFolder folder = new TemporaryContentBuilderFolder();
+        string appScriptPath = folder.WriteAppAndDepotScriptsLikeSteamPipeGui("100010", "100011", "E:\\old");
+        DateTime creationTime = new DateTime(2025, 3, 1, 12, 0, 0, DateTimeKind.Utc);
+        File.SetCreationTimeUtc(appScriptPath, creationTime);
+        AppBuildScript game = AppBuildScript.Load(appScriptPath);
+
+        game.Description = "1.1";
+        game.Save();
+
+        Assert.That(AppBuildScript.Load(appScriptPath).Description, Is.EqualTo("1.1"));
+        Assert.That(game.FileCreationTimeUtc, Is.EqualTo(creationTime));
+    }
+
+    [Test]
     public void Save_WritesTheEditedValuesAndKeepsTheOtherKeys()
     {
         using TemporaryContentBuilderFolder folder = new TemporaryContentBuilderFolder();

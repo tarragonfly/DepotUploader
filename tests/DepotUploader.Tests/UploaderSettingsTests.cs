@@ -43,12 +43,13 @@ public class UploaderSettingsTests
         Assert.That(lines[0], Is.EqualTo("{"));
         Assert.That(lines[1], Is.EqualTo("  \"ContentBuilderPath\": \"C:\\\\steamworks\\\\sdk\\\\tools\\\\ContentBuilder\","));
         Assert.That(lines[2], Does.StartWith("  \"SteamLogin\": \""));
-        Assert.That(lines[3], Is.EqualTo("  \"GameNamesByAppId\": {"));
-        Assert.That(lines[4], Does.StartWith("    \"100030\": \""));
-        Assert.That(lines[5], Is.EqualTo("    \"200040\": \"\""));
-        Assert.That(lines[6], Is.EqualTo("  }"));
-        Assert.That(lines[7], Is.EqualTo("}"));
-        Assert.That(lines, Has.Length.EqualTo(8));
+        Assert.That(lines[3], Is.EqualTo("  \"GameSortOrder\": \"NameAToZ\","));
+        Assert.That(lines[4], Is.EqualTo("  \"GameNamesByAppId\": {"));
+        Assert.That(lines[5], Does.StartWith("    \"100030\": \""));
+        Assert.That(lines[6], Is.EqualTo("    \"200040\": \"\""));
+        Assert.That(lines[7], Is.EqualTo("  }"));
+        Assert.That(lines[8], Is.EqualTo("}"));
+        Assert.That(lines, Has.Length.EqualTo(9));
         Assert.That(loadError, Is.Null);
         Assert.That(loaded.SteamLogin, Is.EqualTo(saved.SteamLogin));
         Assert.That(loaded.GameNamesByAppId, Is.EqualTo(saved.GameNamesByAppId));
@@ -63,7 +64,7 @@ public class UploaderSettingsTests
         new UploaderSettings { SteamLogin = "builder_account" }.Save(settingsPath);
         UploaderSettings loaded = UploaderSettings.Load(settingsPath, out string? loadError);
 
-        Assert.That(File.ReadAllLines(settingsPath)[3], Is.EqualTo("  \"GameNamesByAppId\": {}"));
+        Assert.That(File.ReadAllLines(settingsPath)[4], Is.EqualTo("  \"GameNamesByAppId\": {}"));
         Assert.That(loadError, Is.Null);
         Assert.That(loaded.SteamLogin, Is.EqualTo("builder_account"));
         Assert.That(loaded.GameNamesByAppId, Is.Empty);
@@ -106,6 +107,35 @@ public class UploaderSettingsTests
         Assert.That(loaded.ContentBuilderPath, Is.EqualTo(@"C:\steamworks\sdk\tools\ContentBuilder"));
         Assert.That(loaded.SteamLogin, Is.EqualTo("builder_account"));
         Assert.That(loaded.GameName("100030"), Is.EqualTo("Sample Game"));
+        Assert.That(loaded.GameSortOrder, Is.EqualTo(GameSortOrder.NameAToZ));
+    }
+
+    [Test]
+    public void Load_ReturnsTheGameSortOrderSaveWrote()
+    {
+        using TemporaryContentBuilderFolder folder = new TemporaryContentBuilderFolder();
+        string settingsPath = Path.Combine(folder.ContentBuilderPath, "settings.json");
+
+        new UploaderSettings { GameSortOrder = GameSortOrder.RecentlyAddedFirst }.Save(settingsPath);
+        UploaderSettings loaded = UploaderSettings.Load(settingsPath, out string? loadError);
+
+        Assert.That(loadError, Is.Null);
+        Assert.That(loaded.GameSortOrder, Is.EqualTo(GameSortOrder.RecentlyAddedFirst));
+    }
+
+    [Test]
+    public void Load_SortsByNameWhenTheGameSortOrderIsNotOneThisVersionKnows()
+    {
+        using TemporaryContentBuilderFolder folder = new TemporaryContentBuilderFolder();
+        string settingsPath = Path.Combine(folder.ContentBuilderPath, "settings.json");
+        File.WriteAllText(settingsPath, "{ \"SteamLogin\": \"builder_account\", \"GameSortOrder\": \"MostDepotsFirst\" }");
+
+        UploaderSettings loaded = UploaderSettings.Load(settingsPath, out string? loadError);
+
+        Assert.That(loadError, Is.Null);
+        Assert.That(loaded.MustNotOverwriteFile, Is.False);
+        Assert.That(loaded.SteamLogin, Is.EqualTo("builder_account"));
+        Assert.That(loaded.GameSortOrder, Is.EqualTo(GameSortOrder.NameAToZ));
     }
 
     [Test]
