@@ -23,7 +23,7 @@ dotnet publish src/DepotUploader -c Release -o publish
 publish\DepotUploader.exe
 ```
 
-This is the release build: one exe of about 68 KB that targets `net48`, with no other files. Run the tests with `dotnet test`.
+This is the release build: one exe of about 73 KB that targets `net48`, with no other files. Run the tests with `dotnet test`.
 
 ## Use
 
@@ -54,11 +54,14 @@ When a save fails, the log gives the reason and the edit stays in the window. A 
 
 Type the content folder into its cell or pick it with **Browse...** in the same row. A relative content folder is relative to the folder of its script. The Contents column shows the file count, total size and newest file time of each content folder. The confirmation before an upload shows the same numbers and the absolute path of each folder.
 
+While steamcmd runs, the log shows the lines steamcmd appends to `ContentBuilder\builder\logs\console_log.txt`, without their timestamps, the empty lines and the scan progress dots. steamcmd buffers stdout when stdout is a pipe. The log shows stdout only until it has shown a line from `console_log.txt`. It always shows stderr.
+
 After steamcmd exits, the log shows its exit code and the lines it added to `ContentBuilder\output\app_build_<appid>.log`.
 
 ## Limits
 
 - The tool never asks for, stores or passes a password. steamcmd needs a saved sign-in to upload. When an upload stops at the login, click **Sign in...** and upload again.
+- Every steamcmd in `ContentBuilder\builder` appends to the same `console_log.txt`. While an upload runs, the log also shows the lines of a steamcmd that SteamPipe GUI or a second window started. **Sign in...** doesn't open steamcmd while an upload runs, and **Upload** doesn't start while the steamcmd sign-in window is open.
 - Depots written inside the app script are not supported. Each depot needs its own script file.
 - A depot needs a content folder in its own script or in the app script. The tool doesn't upload a game when one of its depots has neither.
 - Values can't contain a double quote.
