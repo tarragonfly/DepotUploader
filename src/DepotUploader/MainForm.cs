@@ -17,6 +17,12 @@ internal sealed class MainForm : Form
     private readonly TextBox _contentBuilderPathBox = new TextBox { Dock = DockStyle.Fill };
     private readonly TextBox _steamLoginBox = new TextBox { Dock = DockStyle.Fill };
     private readonly ListBox _gameList = new ListBox { Dock = DockStyle.Fill, IntegralHeight = false };
+    private readonly Button _removeGameButton = new Button
+    {
+        Text = "Remove game...",
+        Dock = DockStyle.Bottom,
+        AutoSize = true,
+    };
     private readonly TextBox _gameNameBox = new TextBox { Dock = DockStyle.Fill };
     private readonly TextBox _appIdBox = new TextBox { Dock = DockStyle.Fill, ReadOnly = true };
     private readonly TextBox _descriptionBox = new TextBox { Dock = DockStyle.Fill };
@@ -124,10 +130,12 @@ internal sealed class MainForm : Form
     {
         Button addGameButton = new Button { Text = "Add game...", Dock = DockStyle.Bottom, AutoSize = true };
         addGameButton.Click += (_, _) => AddGame();
+        _removeGameButton.Click += (_, _) => RemoveShownGame();
 
         Panel panel = new Panel { Dock = DockStyle.Fill, Padding = new Padding(8) };
         panel.Controls.Add(_gameList);
         panel.Controls.Add(addGameButton);
+        panel.Controls.Add(_removeGameButton);
 
         return panel;
     }
@@ -363,6 +371,7 @@ internal sealed class MainForm : Form
         _depotGrid.Rows.Clear();
         _shownGame = game;
         bool hasGame = game is not null;
+        _removeGameButton.Enabled = hasGame;
         _gameNameBox.Enabled = hasGame;
         _descriptionBox.Enabled = hasGame;
         _liveBranchBox.Enabled = hasGame;
@@ -674,6 +683,57 @@ internal sealed class MainForm : Form
         SaveSettings();
         ReloadGames();
         _gameList.SelectedIndex = _games.FindIndex(game => game.AppId == dialog.AppId);
+    }
+
+    private void RemoveShownGame()
+    {
+        if (_shownGame is null || _contentBuilder is null)
+        {
+            return;
+        }
+
+        AppBuildScript game = _shownGame;
+        ContentBuilderFolder contentBuilder = _contentBuilder;
+        string gameListText = GameListText(game);
+        List<string> scriptPaths;
+        try
+        {
+            scriptPaths = contentBuilder.AppScriptAndDepotScriptsOnlyItUses(game.FilePath, game.AppId);
+        }
+        catch (Exception exception) when (exception is InvalidOperationException or FormatException
+            or IOException or UnauthorizedAccessException)
+        {
+            MessageBox.Show(this, $"The game was not removed. {exception.Message}", Text, MessageBoxButtons.OK,
+                MessageBoxIcon.Warning);
+
+            return;
+        }
+
+        string scriptNames = string.Join(", ", scriptPaths.Select(Path.GetFileName));
+        if (MessageBox.Show(this,
+                $"Remove {gameListText} from the list? This moves {scriptNames} to "
+                + $"{contentBuilder.RemovedGameScriptsFolder}. To list the game again, move the files back and click "
+                + "Reload.",
+                Text, MessageBoxButtons.OKCancel, MessageBoxIcon.Question) != DialogResult.OK)
+        {
+            return;
+        }
+
+        try
+        {
+            contentBuilder.MoveToRemovedGameScriptsFolder(scriptPaths);
+        }
+        catch (Exception exception) when (exception is InvalidOperationException or IOException
+            or UnauthorizedAccessException)
+        {
+            MessageBox.Show(this, $"The game was not removed. {exception.Message}", Text, MessageBoxButtons.OK,
+                MessageBoxIcon.Warning);
+
+            return;
+        }
+
+        ReloadGames();
+        AppendLog($"Removed {gameListText}. Moved {scriptNames} to {contentBuilder.RemovedGameScriptsFolder}.");
     }
 
     private bool CanRunSteamCmdOrExplainWhyNot()
