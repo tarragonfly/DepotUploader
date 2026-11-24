@@ -16,7 +16,18 @@ internal sealed class MainForm : Form
 
     private readonly TextBox _contentBuilderPathBox = new TextBox { Dock = DockStyle.Fill };
     private readonly TextBox _steamLoginBox = new TextBox { Dock = DockStyle.Fill };
-    private readonly ListBox _gameList = new ListBox { Dock = DockStyle.Fill, IntegralHeight = false };
+    private readonly TextBox _gameFilterBox = new TextBox { Dock = DockStyle.Fill };
+    private readonly ComboBox _gameSortOrderBox = new ComboBox
+    {
+        Dock = DockStyle.Fill,
+        DropDownStyle = ComboBoxStyle.DropDownList,
+    };
+    private readonly ListBox _gameList = new ListBox
+    {
+        Dock = DockStyle.Fill,
+        IntegralHeight = false,
+        FormattingEnabled = true,
+    };
     private readonly Button _removeGameButton = new Button
     {
         Text = "Remove game...",
@@ -83,11 +94,15 @@ internal sealed class MainForm : Form
 
         _contentBuilderPathBox.Text = _settings.ContentBuilderPath;
         _steamLoginBox.Text = _settings.SteamLogin;
+        _gameSortOrderBox.SelectedIndex = (int)_settings.GameSortOrder;
         if (settingsLoadError is not null)
         {
             AppendLog(settingsLoadError);
         }
 
+        _gameFilterBox.TextChanged += (_, _) => ListGames(_shownGame);
+        _gameSortOrderBox.SelectedIndexChanged += (_, _) => SaveSortOrderAndListGames();
+        _gameList.Format += (_, item) => item.Value = GameListText((AppBuildScript)item.ListItem);
         _gameList.SelectedIndexChanged += (_, _) => SwitchToSelectedGame();
         FormClosing += (_, closing) => SaveEditsAndSettingsOrCancelClosing(closing);
         Shown += (_, _) => ReloadGames();
@@ -131,11 +146,32 @@ internal sealed class MainForm : Form
         Button addGameButton = new Button { Text = "Add game...", Dock = DockStyle.Bottom, AutoSize = true };
         addGameButton.Click += (_, _) => AddGame();
         _removeGameButton.Click += (_, _) => RemoveShownGame();
+        _gameSortOrderBox.Items.AddRange(new object[] { "Name A-Z", "Last build first", "Recently added first" });
+
+        TableLayoutPanel filterAndSortOrder = new TableLayoutPanel
+        {
+            Dock = DockStyle.Top,
+            AutoSize = true,
+            ColumnCount = 2,
+            RowCount = 2,
+            Padding = new Padding(0, 0, 0, 4),
+        };
+        filterAndSortOrder.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        filterAndSortOrder.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        filterAndSortOrder.Controls.Add(NewLabel("Filter"), 0, 0);
+        filterAndSortOrder.Controls.Add(_gameFilterBox, 1, 0);
+        filterAndSortOrder.Controls.Add(NewLabel("Sort by"), 0, 1);
+        filterAndSortOrder.Controls.Add(_gameSortOrderBox, 1, 1);
 
         Panel panel = new Panel { Dock = DockStyle.Fill, Padding = new Padding(8) };
         panel.Controls.Add(_gameList);
+        panel.Controls.Add(filterAndSortOrder);
         panel.Controls.Add(addGameButton);
         panel.Controls.Add(_removeGameButton);
+        filterAndSortOrder.TabIndex = 0;
+        _gameList.TabIndex = 1;
+        addGameButton.TabIndex = 2;
+        _removeGameButton.TabIndex = 3;
 
         return panel;
     }
@@ -306,36 +342,61 @@ internal sealed class MainForm : Form
 
         _contentBuilder = contentBuilder;
         _games.AddRange(contentBuilder.LoadAppBuildScripts(out List<string> scriptLoadErrors));
-        foreach (AppBuildScript game in _games)
-        {
-            _gameList.Items.Add(GameListText(game));
-        }
-
         AppendLog($"Found {_games.Count} game(s) in {contentBuilder.ScriptsFolder}.");
         foreach (string scriptLoadError in scriptLoadErrors)
         {
             AppendLog($"Could not read {scriptLoadError}");
         }
 
-        int indexToSelect = _games.FindIndex(game => game.AppId == selectedAppId);
-        if (indexToSelect < 0 && _games.Count > 0)
-        {
-            indexToSelect = 0;
-        }
-
-        if (indexToSelect < 0)
+        ListGames(_games.Find(game => game.AppId == selectedAppId));
+        if (_shownGame is null)
         {
             ShowGame(null);
-        }
-        else
-        {
-            _gameList.SelectedIndex = indexToSelect;
         }
     }
 
     private string GameListText(AppBuildScript game)
     {
         return $"{_settings.GameName(game.AppId)} ({game.AppId})";
+    }
+
+    private void ListGames(AppBuildScript? gameToSelect)
+    {
+        object[] listedGames = ListedGames.MatchingFilterInSortOrder(_games, GameListText, _gameFilterBox.Text,
+            _settings.GameSortOrder).ToArray();
+        _ignoreGameSelectionChange = true;
+        _gameList.BeginUpdate();
+        _gameList.Items.Clear();
+        _gameList.Items.AddRange(listedGames);
+        if (gameToSelect is not null && _gameList.Items.Contains(gameToSelect))
+        {
+            _gameList.SelectedItem = gameToSelect;
+        }
+        else if (_gameList.Items.Count > 0)
+        {
+            _gameList.SelectedIndex = 0;
+        }
+
+        _gameList.EndUpdate();
+        _ignoreGameSelectionChange = false;
+        SwitchToSelectedGame();
+    }
+
+    private void ShowInGameList(AppBuildScript game)
+    {
+        if (!_gameList.Items.Contains(game))
+        {
+            _gameFilterBox.Text = string.Empty;
+        }
+
+        _gameList.SelectedItem = game;
+    }
+
+    private void SaveSortOrderAndListGames()
+    {
+        _settings.GameSortOrder = (GameSortOrder)_gameSortOrderBox.SelectedIndex;
+        SaveSettings();
+        ListGames(_shownGame);
     }
 
     private void SwitchToSelectedGame()
@@ -345,7 +406,7 @@ internal sealed class MainForm : Form
             return;
         }
 
-        AppBuildScript? selectedGame = _gameList.SelectedIndex < 0 ? null : _games[_gameList.SelectedIndex];
+        AppBuildScript? selectedGame = (AppBuildScript?)_gameList.SelectedItem;
         if (ReferenceEquals(selectedGame, _shownGame))
         {
             return;
@@ -355,9 +416,7 @@ internal sealed class MainForm : Form
         {
             MessageBox.Show(this, EditsNotSavedMessage(_shownGame, whyNotSaved), Text, MessageBoxButtons.OK,
                 MessageBoxIcon.Warning);
-            _ignoreGameSelectionChange = true;
-            _gameList.SelectedIndex = _games.IndexOf(_shownGame);
-            _ignoreGameSelectionChange = false;
+            ShowInGameList(_shownGame);
 
             return;
         }
@@ -612,9 +671,13 @@ internal sealed class MainForm : Form
         {
             _settings.GameNamesByAppId[game.AppId] = _gameNameBox.Text.Trim();
             savedTheName = SaveSettings();
-            _ignoreGameSelectionChange = true;
-            _gameList.Items[_games.IndexOf(game)] = GameListText(game);
-            _ignoreGameSelectionChange = false;
+            int listIndex = _gameList.Items.IndexOf(game);
+            if (listIndex >= 0)
+            {
+                _ignoreGameSelectionChange = true;
+                _gameList.Items[listIndex] = game;
+                _ignoreGameSelectionChange = false;
+            }
         }
 
         ShowSavedValues(game);
@@ -682,7 +745,11 @@ internal sealed class MainForm : Form
 
         SaveSettings();
         ReloadGames();
-        _gameList.SelectedIndex = _games.FindIndex(game => game.AppId == dialog.AppId);
+        AppBuildScript? addedGame = _games.Find(game => game.AppId == dialog.AppId);
+        if (addedGame is not null)
+        {
+            ShowInGameList(addedGame);
+        }
     }
 
     private void RemoveShownGame()
@@ -897,6 +964,11 @@ internal sealed class MainForm : Form
             {
                 _stopButton.Enabled = false;
                 _uploadButton.Enabled = _shownGame is not null;
+                bool shownGameIsSelectedInList = ReferenceEquals(_gameList.SelectedItem, _shownGame);
+                if (_settings.GameSortOrder == GameSortOrder.LastBuildFirst && shownGameIsSelectedInList)
+                {
+                    ListGames(_shownGame);
+                }
             }
         }
     }

@@ -23,6 +23,10 @@ internal sealed class AppBuildScript
         }
     }
 
+    public DateTime LastBuildTimeUtc => FileTimeOrTimeOfMissingFile(() => File.GetLastWriteTimeUtc(BuildLogPath));
+
+    public DateTime FileCreationTimeUtc => FileTimeOrTimeOfMissingFile(() => File.GetCreationTimeUtc(FilePath));
+
     public IReadOnlyList<DepotBuildScript> Depots => _depots;
 
     public string AppId => _scriptFile.Root.GetValue("appid");
@@ -48,6 +52,19 @@ internal sealed class AppBuildScript
             {
                 _scriptFile.Root.SetValue("preview", value ? "1" : "0");
             }
+        }
+    }
+
+    private static DateTime FileTimeOrTimeOfMissingFile(Func<DateTime> readFileTime)
+    {
+        try
+        {
+            return readFileTime();
+        }
+        catch (Exception exception) when (exception is ArgumentException or NotSupportedException
+            or IOException or UnauthorizedAccessException)
+        {
+            return DateTime.FromFileTimeUtc(0);
         }
     }
 

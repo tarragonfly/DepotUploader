@@ -6,6 +6,8 @@ internal sealed class UploaderSettings
 
     public string SteamLogin { get; set; } = string.Empty;
 
+    public GameSortOrder GameSortOrder { get; set; }
+
     public Dictionary<string, string> GameNamesByAppId { get; set; } = new Dictionary<string, string>();
 
     public bool MustNotOverwriteFile { get; private set; }
@@ -83,6 +85,9 @@ internal sealed class UploaderSettings
                 case nameof(SteamLogin):
                     settings.SteamLogin = JsonTextOrEmpty(member);
                     break;
+                case nameof(GameSortOrder):
+                    settings.GameSortOrder = GameSortOrderNamed(JsonTextOrEmpty(member));
+                    break;
                 case nameof(GameNamesByAppId):
                     settings.GameNamesByAppId = new Dictionary<string, string>();
                     foreach (KeyValuePair<string, object?> gameName in MembersOfJsonObject(member.Value, member.Key))
@@ -95,6 +100,12 @@ internal sealed class UploaderSettings
         }
 
         return settings;
+    }
+
+    private static GameSortOrder GameSortOrderNamed(string name)
+    {
+        return Enum.GetValues(typeof(GameSortOrder)).Cast<GameSortOrder>()
+            .FirstOrDefault(sortOrder => sortOrder.ToString() == name);
     }
 
     private static IEnumerable<KeyValuePair<string, object?>> MembersOfJsonObject(object? json, string name)
@@ -130,6 +141,7 @@ internal sealed class UploaderSettings
             "{",
             $"  \"{nameof(ContentBuilderPath)}\": {JsonText.Quote(ContentBuilderPath)},",
             $"  \"{nameof(SteamLogin)}\": {JsonText.Quote(SteamLogin)},",
+            $"  \"{nameof(GameSortOrder)}\": {JsonText.Quote(GameSortOrder.ToString())},",
             $"  \"{nameof(GameNamesByAppId)}\": {gameNames}",
             "}");
     }
