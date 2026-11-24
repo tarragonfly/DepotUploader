@@ -8,6 +8,7 @@ namespace DepotUploader;
 internal static class SteamCmd
 {
     private static readonly TimeSpan TimeAllowedToStop = TimeSpan.FromSeconds(10);
+    private static readonly TimeSpan TimeBetweenConsoleLogReads = TimeSpan.FromMilliseconds(250);
 
     public static async Task<int> RunAppBuildAsync(string steamCmdPath, string steamLogin, string appScriptPath,
         Action<string> onOutputLine, CancellationToken cancellation)
@@ -23,10 +24,20 @@ internal static class SteamCmd
             RedirectStandardError = true,
         };
 
+        SteamCmdConsoleLog consoleLog = new SteamCmdConsoleLog(steamCmdPath);
         using Process process = new Process { StartInfo = startInfo };
-        process.OutputDataReceived += (_, line) => ForwardLine(line.Data, onOutputLine);
+        process.OutputDataReceived += (_, line) =>
+        {
+            if (!consoleLog.HasReturnedLines)
+            {
+                ForwardLine(line.Data, onOutputLine);
+            }
+        };
         process.ErrorDataReceived += (_, line) => ForwardLine(line.Data, onOutputLine);
         process.Start();
+        using CancellationTokenSource stopForwardingConsoleLog = new CancellationTokenSource();
+        Task consoleLogForwarded = Task.Run(() =>
+            ForwardConsoleLogUntilStoppedAsync(consoleLog, onOutputLine, stopForwardingConsoleLog.Token));
         IntPtr jobOfSteamCmdAndItsChildren = CreateJobObject(IntPtr.Zero, null);
         try
         {
@@ -69,14 +80,17 @@ internal static class SteamCmd
         }
         finally
         {
+            stopForwardingConsoleLog.Cancel();
             if (jobOfSteamCmdAndItsChildren != IntPtr.Zero)
             {
                 CloseHandle(jobOfSteamCmdAndItsChildren);
             }
+
+            await consoleLogForwarded;
         }
     }
 
-    public static void OpenSignInConsole(string steamCmdPath, string steamLogin)
+    public static Process? OpenSignInConsole(string steamCmdPath, string steamLogin)
     {
         ProcessStartInfo startInfo = new ProcessStartInfo(steamCmdPath)
         {
@@ -84,7 +98,8 @@ internal static class SteamCmd
             WorkingDirectory = Path.GetDirectoryName(steamCmdPath)!,
             UseShellExecute = true,
         };
-        Process.Start(startInfo)?.Dispose();
+
+        return Process.Start(startInfo);
     }
 
     internal static string QuotedArguments(params string[] arguments)
@@ -153,6 +168,18 @@ internal static class SteamCmd
         {
             onOutputLine(line);
         }
+    }
+
+    private static async Task ForwardConsoleLogUntilStoppedAsync(SteamCmdConsoleLog consoleLog,
+        Action<string> onOutputLine, CancellationToken stopped)
+    {
+        while (!stopped.IsCancellationRequested)
+        {
+            consoleLog.ReadAppendedLines().ForEach(onOutputLine);
+            await Task.WhenAny(Task.Delay(TimeBetweenConsoleLogReads, stopped));
+        }
+
+        consoleLog.ReadAppendedLines().ForEach(onOutputLine);
     }
 
     [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]

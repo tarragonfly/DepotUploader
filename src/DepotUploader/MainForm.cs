@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.Diagnostics;
 
 namespace DepotUploader;
 
@@ -38,6 +39,7 @@ internal sealed class MainForm : Form
     private ContentBuilderFolder? _contentBuilder;
     private AppBuildScript? _shownGame;
     private CancellationTokenSource? _uploadCancellation;
+    private Process? _signInConsole;
     private bool _ignoreGameSelectionChange;
 
     public MainForm()
@@ -697,13 +699,39 @@ internal sealed class MainForm : Form
 
     private void OpenSignInConsole()
     {
+        if (_uploadCancellation is not null)
+        {
+            AppendLog("Sign in is not available while steamcmd uploads. Its lines would appear in this log.");
+
+            return;
+        }
+
         if (!CanRunSteamCmdOrExplainWhyNot())
         {
             return;
         }
 
+        if (_signInConsole is { HasExited: false })
+        {
+            AppendLog("The steamcmd sign-in window is already open.");
+
+            return;
+        }
+
         SaveSettings();
-        SteamCmd.OpenSignInConsole(_contentBuilder!.SteamCmdPath, _steamLoginBox.Text.Trim());
+        _signInConsole?.Dispose();
+        _signInConsole = null;
+        try
+        {
+            _signInConsole = SteamCmd.OpenSignInConsole(_contentBuilder!.SteamCmdPath, _steamLoginBox.Text.Trim());
+        }
+        catch (Exception exception) when (exception is IOException or InvalidOperationException or Win32Exception)
+        {
+            AppendLog($"steamcmd could not be started. {exception.Message}");
+
+            return;
+        }
+
         AppendLog("Opened steamcmd in its own window. Type your password and Steam Guard code there. "
             + "steamcmd keeps the sign-in for later uploads.");
     }
@@ -713,6 +741,15 @@ internal sealed class MainForm : Form
         _depotGrid.EndEdit();
         if (_shownGame is null || !CanRunSteamCmdOrExplainWhyNot())
         {
+            return;
+        }
+
+        if (_signInConsole is { HasExited: false } && string.Equals(_signInConsole.StartInfo.FileName,
+                _contentBuilder!.SteamCmdPath, StringComparison.OrdinalIgnoreCase))
+        {
+            MessageBox.Show(this, "Finish the sign-in in the steamcmd window or close that window, then upload.", Text,
+                MessageBoxButtons.OK, MessageBoxIcon.Information);
+
             return;
         }
 
