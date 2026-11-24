@@ -8,7 +8,7 @@ Valve's SteamPipe GUI handles one game per window. Depot Uploader lists every ga
 
 ## Download
 
-Download `DepotUploader-<version>-win-x64.exe` from the [latest release](https://github.com/tarragonfly/DepotUploader/releases/latest). It's a single 73 KB exe.
+Download `DepotUploader-<version>-win-x64.exe` from the [latest release](https://github.com/tarragonfly/DepotUploader/releases/latest). It's a single 77 KB exe.
 
 Requirements:
 
@@ -24,6 +24,8 @@ The exe is not code-signed. Windows SmartScreen may show a warning on first run.
 3. Select a game, set the build description and the content folder of each depot, then click **Upload**.
 
 **Add game...** writes a new `app_<appid>.vdf` and one `depot_<depotid>.vdf` per depot. **Add depot...** adds a depot to the selected game, and **X** in a depot row removes it from the game and keeps its `depot_<depotid>.vdf`.
+
+**Remove game...** moves the selected game's `app_<appid>.vdf` and its depot scripts to `scripts\removed`. A depot script is moved only when it is directly in `scripts` and no other `.vdf` file directly in `scripts` refers to it. No depot script is moved when another `.vdf` file in `scripts` can't be parsed. To list the game again, move the files back and click **Reload**.
 
 | Field | Script key | Effect |
 |---|---|---|
