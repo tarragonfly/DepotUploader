@@ -8,7 +8,7 @@ Valve's SteamPipe GUI handles one game per window. Depot Uploader lists every ga
 
 ## Download
 
-Download `DepotUploader-<version>-win-x64.exe` from the [latest release](https://github.com/tarragonfly/DepotUploader/releases/latest). It's a single 77 KB exe.
+Download `DepotUploader-<version>-win-x64.exe` from the [latest release](https://github.com/tarragonfly/DepotUploader/releases/latest). It's a single 81 KB exe.
 
 Requirements:
 
@@ -22,6 +22,14 @@ The exe is not code-signed. Windows SmartScreen may show a warning on first run.
 1. At the bottom of the window, choose the `ContentBuilder` folder and enter your Steam login name.
 2. Click **Sign in...** once. steamcmd opens in its own window and asks for your password and Steam Guard code there. steamcmd saves the sign-in for later uploads.
 3. Select a game, set the build description and the content folder of each depot, then click **Upload**.
+
+**Filter** lists only the games whose name or app ID contains the text you type. **Sort by** sets the order of the list:
+
+| Sort by | Order |
+|---|---|
+| Name A-Z | The game name, ignoring case |
+| Last build first | The write time of `app_build_<appid>.log` in the `buildoutput` folder of the app script, newest first. steamcmd writes this log on every build, including preview builds and builds started from SteamPipe GUI or the command line. |
+| Recently added first | The creation time of `app_<appid>.vdf`, newest first |
 
 **Add game...** writes a new `app_<appid>.vdf` and one `depot_<depotid>.vdf` per depot. **Add depot...** adds a depot to the selected game, and **X** in a depot row removes it from the game and keeps its `depot_<depotid>.vdf`.
 
@@ -44,7 +52,7 @@ There is no Save button. An edit is saved when you leave its field. **Upload** s
 - Comments in a script are removed when the tool saves it.
 - A save fails when a script changed on disk after the tool loaded it. Click **Reload** to read the scripts again. **Reload** discards unsaved edits.
 - When a failed save can't restore a file, the error names the `.previous` file that holds it. Rename that file to the original name.
-- Game names, the ContentBuilder path and the Steam login name are saved in `%APPDATA%\DepotUploader\settings.json`. With two windows open, the last write wins.
+- Game names, the sort order, the ContentBuilder path and the Steam login name are saved in `%APPDATA%\DepotUploader\settings.json`. With two windows open, the last write wins.
 
 ## Build from source
 
