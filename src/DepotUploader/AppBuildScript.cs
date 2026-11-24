@@ -13,6 +13,16 @@ internal sealed class AppBuildScript
 
     public string FilePath => _scriptFile.FilePath;
 
+    public string BuildLogPath
+    {
+        get
+        {
+            string buildOutputFolder = _scriptFile.AbsolutePath(_scriptFile.Root.GetValue("buildoutput"));
+
+            return $"{buildOutputFolder.TrimEnd('\\', '/')}\\app_build_{AppId}.log";
+        }
+    }
+
     public IReadOnlyList<DepotBuildScript> Depots => _depots;
 
     public string AppId => _scriptFile.Root.GetValue("appid");

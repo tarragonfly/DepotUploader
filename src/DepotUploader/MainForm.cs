@@ -860,7 +860,7 @@ internal sealed class MainForm : Form
             return;
         }
 
-        string buildLogPath = contentBuilder.AppBuildLogPath(game.AppId);
+        string buildLogPath = game.BuildLogPath;
         long buildLogLengthBefore = File.Exists(buildLogPath) ? new FileInfo(buildLogPath).Length : 0;
         _uploadCancellation = new CancellationTokenSource();
         _uploadButton.Enabled = false;
@@ -962,7 +962,7 @@ internal sealed class MainForm : Form
                     .Replace("\n", Environment.NewLine));
             }
         }
-        catch (IOException exception)
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
         {
             AppendLog($"{Path.GetFileName(buildLogPath)} could not be read. {exception.Message}");
         }

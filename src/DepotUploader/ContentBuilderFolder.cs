@@ -21,11 +21,6 @@ internal sealed class ContentBuilderFolder
 
     public string SteamCmdPath => Path.Combine(FolderPath, "builder", "steamcmd.exe");
 
-    public string AppBuildLogPath(string appId)
-    {
-        return Path.Combine(BuildOutputFolder, $"app_build_{appId}.log");
-    }
-
     public List<AppBuildScript> LoadAppBuildScripts(out List<string> scriptLoadErrors)
     {
         List<AppBuildScript> scripts = new List<AppBuildScript>();
