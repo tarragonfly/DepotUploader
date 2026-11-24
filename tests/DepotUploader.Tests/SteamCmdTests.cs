@@ -48,6 +48,59 @@ public class SteamCmdTests
     }
 
     [Test]
+    public void RunAppBuildAsync_ForwardsAConsoleLogLineWhileSteamCmdStillRuns()
+    {
+        using TemporaryContentBuilderFolder folder = new TemporaryContentBuilderFolder();
+        string steamCmdStandIn = folder.WriteScript("steamcmd-stand-in.cmd",
+            "@mkdir logs\r\n"
+            + "@echo [2026-11-24 00:56:51] Uploading content...>>logs\\console_log.txt\r\n"
+            + "@ping -n 30 127.0.0.1 >nul\r\n");
+        using CancellationTokenSource cancellation = new CancellationTokenSource();
+        using ManualResetEventSlim forwardedConsoleLogLine = new ManualResetEventSlim();
+
+        Task<int> run = SteamCmd.RunAppBuildAsync(steamCmdStandIn, "builder_account", "app_100030.vdf", line =>
+        {
+            if (line == "Uploading content...")
+            {
+                forwardedConsoleLogLine.Set();
+            }
+        }, cancellation.Token);
+
+        Assert.That(forwardedConsoleLogLine.Wait(TimeSpan.FromSeconds(10)), Is.True);
+        Assert.That(run.IsCompleted, Is.False);
+        cancellation.Cancel();
+        Assert.That(async () => await run, Throws.InstanceOf<OperationCanceledException>());
+    }
+
+    [Test]
+    public async Task RunAppBuildAsync_AfterAConsoleLogLineForwardsStderrAndNoStdout()
+    {
+        using TemporaryContentBuilderFolder folder = new TemporaryContentBuilderFolder();
+        string consoleLogPath = Path.Combine(folder.ScriptsPath, "logs", "console_log.txt");
+        Directory.CreateDirectory(Path.GetDirectoryName(consoleLogPath)!);
+        File.WriteAllText(consoleLogPath, "[2026-11-24 00:50:00] Line of an earlier upload\r\n");
+        string consoleLogLineWasForwardedPath = Path.Combine(folder.ScriptsPath, "console-log-line-was-forwarded.txt");
+        string steamCmdStandIn = folder.WriteScript("steamcmd-stand-in.cmd",
+            "@echo [2026-11-24 00:56:51] Uploading content...>>logs\\console_log.txt\r\n"
+            + ":wait\r\n"
+            + "@if not exist console-log-line-was-forwarded.txt (ping -n 2 127.0.0.1 >nul & goto wait)\r\n"
+            + "@echo Line on stdout\r\n"
+            + "@echo Line on stderr>&2\r\n");
+        ConcurrentQueue<string> lines = new ConcurrentQueue<string>();
+
+        await SteamCmd.RunAppBuildAsync(steamCmdStandIn, "builder_account", "app_100030.vdf", line =>
+        {
+            lines.Enqueue(line);
+            if (line == "Uploading content...")
+            {
+                File.WriteAllText(consoleLogLineWasForwardedPath, string.Empty);
+            }
+        }, CancellationToken.None);
+
+        Assert.That(lines, Is.EqualTo(new[] { "Uploading content...", "Line on stderr" }));
+    }
+
+    [Test]
     public void RunAppBuildAsync_StopsTheProcessWhenCancelled()
     {
         using TemporaryContentBuilderFolder folder = new TemporaryContentBuilderFolder();
