@@ -23,43 +23,26 @@ The exe is not code-signed. Windows SmartScreen may show a warning on first run.
 2. Click **Sign in** once. steamcmd opens in its own window and asks for your password and Steam Guard code there. steamcmd saves the sign-in for later uploads.
 3. Select a game, set the build description and the content folder of each depot, then click **Upload**.
 
-To upload several games in one batch, tick their checkboxes in the game list and click **Upload ticked games**. A click on a checkbox or Space on the selected game ticks or unticks it. steamcmd runs once per ticked game, in list order, with the build description, branch and preview setting saved in that game's app script. A game that fails doesn't end the batch, the games after it still run. **Stop** stops the running game, and the games after it are not started. The button counts every ticked game, including games the filter hides. Ticks stay through **Reload**. They are not saved when the window closes.
+To upload several games, tick them in the game list and click **Upload ticked games**. steamcmd runs once per ticked game, in list order. A game that fails doesn't end the batch.
 
-The box next to the funnel icon filters the game list: it shows only the games whose name or app ID contains the text you type. The box next to the sort icon sets the order of the list:
+**Add game** writes a new `app_<appid>.vdf` and one `depot_<depotid>.vdf` per depot. **Add depot** adds a depot to the selected game. The trash button in a depot row removes the depot from the game and keeps its `depot_<depotid>.vdf`. A warning icon marks a depot whose content folder is not set, not found, empty or unreadable.
 
-| Choice | Order |
-|---|---|
-| Name A-Z | The game name, ignoring case |
-| Last build first | The write time of `app_build_<appid>.log` in the `buildoutput` folder of the app script, newest first. steamcmd writes this log on every build, including preview builds and builds started from SteamPipe GUI or the command line. |
-| Recently added first | The creation time of `app_<appid>.vdf`, newest first |
-
-**Add game** writes a new `app_<appid>.vdf` and one `depot_<depotid>.vdf` per depot. **Add depot** adds a depot to the selected game. In a depot row, the folder button opens a folder picker for the content folder, and the trash button removes the depot from the game and keeps its `depot_<depotid>.vdf`. The row shows a warning icon when its content folder is not set, not found, empty or unreadable. The game list shows the same icon next to a game that has such a depot. The list icons are updated on **Reload** and when you edit a game.
-
-**Remove game** moves the selected game's `app_<appid>.vdf` and its depot scripts to `scripts\removed`. A depot script is moved only when it is directly in `scripts` and no other `.vdf` file directly in `scripts` refers to it. No depot script is moved when another `.vdf` file in `scripts` can't be parsed. To list the game again, move the files back and click **Reload**.
+**Remove game** moves the selected game's `app_<appid>.vdf` and its depot scripts to `scripts\removed`. A depot script that another script in `scripts` refers to is not moved. To list the game again, move the files back and click **Reload**.
 
 | Field | Script key | Effect |
 |---|---|---|
 | Build description | `desc` | The label of the build in Steamworks |
 | Set live on branch | `setlive` | The branch that gets the build after the upload. Leave it empty to set the build live in Steamworks yourself. |
-| Preview only, upload nothing | `preview` | steamcmd builds the depot manifests and uploads nothing. The **Upload** button reads **Preview** while it is ticked. |
+| Preview only, upload nothing | `preview` | steamcmd builds the depot manifests and uploads nothing |
 | Content folder | `contentroot` in the depot script | The build folder that goes into the depot. Leave it empty to use `contentroot` of the app script. |
 
-There is no Save button. An edit is saved when you leave its field. **Upload** counts the files of each content folder, shows the file count, total size and absolute path of each folder and asks you to confirm. The confirmation scrolls when it is longer than the screen. An upload doesn't start when a content folder is missing or can't be read. A subfolder that can't be read is left out of the count, and the confirmation says how many were left out. The log shows steamcmd's output while it runs, then its exit code and the app build log. A line next to **Stop** shows whether the last upload or preview build finished, failed or was stopped, and at what time.
-
-**Upload ticked games** asks once for the whole batch. The confirmation lists each ticked game with its build description and branch, or marks it as a preview build, and each depot with the absolute path, file count and total size of its content folder. While the batch runs, the line next to **Stop** shows the position and name of the running game, for example `Game 2 of 3: Sky Harbor`. After the batch it shows how many games finished and names the games that failed, were stopped or were not started.
-
-The build scripts are read when you click **Upload** or **Upload ticked games**. A later edit doesn't change the running upload. The files of a game are counted again right before its steamcmd starts. A game is not uploaded, and counts as failed, when a file was added, removed, renamed or moved since the confirmation, or when a file's size or write time differs. The log names the depot and both counts. **Stop** also ends a file count that is still running. When steamcmd had already ended at the moment you clicked **Stop**, the game keeps the result of that steamcmd run.
-
-An upload doesn't start when two of its games upload the same app and set it live on the same branch. The message names both app scripts. It also doesn't start when the `appid` of an app script contains anything other than digits.
+There is no Save button. An edit is saved when you leave its field. **Upload** shows the file count, total size and absolute path of each content folder and asks you to confirm. The files are counted again right before steamcmd starts, and a game whose content folder changed since the confirmation is not uploaded. The log shows steamcmd's output while it runs, then its exit code and the app build log.
 
 ## Limits
 
 - The tool never asks for, stores or passes a password. When an upload stops at the login, click **Sign in** and upload again.
 - Each depot needs its own script file. Depots written inside the app script are not supported.
-- The checkboxes in the game list are owner-drawn and are not exposed to UI Automation.
-- A changed file is not detected when it keeps its path, its size and its write time. File contents are not hashed. A change after a folder's second count is not detected either. That covers the time the game's other depots are counted and the time steamcmd reads the folder.
-- The file count covers every file in a content folder, including files the depot's `FileMapping` and `FileExclusion` leave out. A change inside a subfolder that can't be read is not detected.
-- Build scripts, build logs and folder paths are read on the UI thread. When a network share that holds one of them stops responding, the window freezes until Windows reports the timeout. Only the file count of the content folders runs on a background thread.
+- The second file count compares the path, size and write time of every file in a content folder, including files the depot's `FileMapping` and `FileExclusion` leave out. File contents are not hashed.
 - Values can't contain a double quote.
 - Comments in a script are removed when the tool saves it.
 - A save fails when a script changed on disk after the tool loaded it. Click **Reload** to read the scripts again. **Reload** discards unsaved edits.
