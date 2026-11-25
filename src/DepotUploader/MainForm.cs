@@ -46,7 +46,18 @@ internal sealed class MainForm : Form
     private readonly TextBox _appIdBox = new TextBox { Dock = DockStyle.Fill, ReadOnly = true };
     private readonly TextBox _descriptionBox = new TextBox { Dock = DockStyle.Fill };
     private readonly TextBox _liveBranchBox = new TextBox { Dock = DockStyle.Fill };
-    private readonly CheckBox _uploadsNothingBox = new CheckBox { Text = "Preview only, upload nothing", AutoSize = true };
+    private readonly LightOrDarkCheckBox _uploadsNothingBox = new LightOrDarkCheckBox
+    {
+        Text = "Preview only, upload nothing",
+        AutoSize = true,
+    };
+    private readonly LightOrDarkCheckBox _darkModeBox = new LightOrDarkCheckBox
+    {
+        Text = "Dark mode",
+        AutoSize = true,
+        Anchor = AnchorStyles.Left,
+        Checked = DarkMode.IsOn,
+    };
     private readonly DataGridView _depotGrid = new DataGridView();
     private readonly IconButton _addDepotButton = new IconButton("Add depot", "add");
     private readonly IconButton _uploadButton = new IconButton("Upload", "upload");
@@ -129,6 +140,7 @@ internal sealed class MainForm : Form
         windowLayout.Controls.Add(_logBox, 0, 1);
         windowLayout.Controls.Add(BuildSteamSetupPanel(), 0, 2);
         Controls.Add(windowLayout);
+        DarkMode.ApplyToNewWindow(this);
         ResumeLayout();
         Size workingAreaSize = Screen.FromPoint(MousePosition).WorkingArea.Size;
         Size = new Size(Math.Min(Width, workingAreaSize.Width), Math.Min(Height, workingAreaSize.Height));
@@ -181,8 +193,19 @@ internal sealed class MainForm : Form
         panel.Controls.Add(NewLabel("Steam login"), 0, 1);
         panel.Controls.Add(_steamLoginBox, 1, 1);
         panel.Controls.Add(signInButton, 2, 1);
+        if (DarkMode.IsSupported)
+        {
+            _darkModeBox.CheckedChanged += (_, _) => SwitchDarkModeOnOrOff();
+            panel.Controls.Add(_darkModeBox, 3, 1);
+        }
 
         return panel;
+    }
+
+    private void SwitchDarkModeOnOrOff()
+    {
+        _depotGrid.EndEdit();
+        DarkMode.SwitchOnOrOff(_darkModeBox.Checked, this);
     }
 
     private Control BuildGameListPanel()
@@ -357,11 +380,23 @@ internal sealed class MainForm : Form
         item.DrawBackground();
         AppBuildScript game = (AppBuildScript)_gameList.Items[item.Index];
         Rectangle checkBoxBounds = GameCheckBoxBounds(item.Graphics, item.Bounds);
-        item.Graphics.FillRectangle(SystemBrushes.Window, Rectangle.Inflate(checkBoxBounds, 1, 1));
-        CheckBoxRenderer.DrawCheckBox(item.Graphics, checkBoxBounds.Location,
-            _scriptPathsOfTickedGames.Contains(game.FilePath)
-                ? CheckBoxState.CheckedNormal
-                : CheckBoxState.UncheckedNormal);
+        using (SolidBrush listBackground = new SolidBrush(_gameList.BackColor))
+        {
+            item.Graphics.FillRectangle(listBackground, Rectangle.Inflate(checkBoxBounds, 1, 1));
+        }
+
+        CheckBoxState checkBoxState = _scriptPathsOfTickedGames.Contains(game.FilePath)
+            ? CheckBoxState.CheckedNormal
+            : CheckBoxState.UncheckedNormal;
+        if (DarkMode.IsOn)
+        {
+            DarkMode.DrawCheckBox(item.Graphics, checkBoxBounds, checkBoxState);
+        }
+        else
+        {
+            CheckBoxRenderer.DrawCheckBox(item.Graphics, checkBoxBounds.Location, checkBoxState);
+        }
+
         Rectangle textBounds = Rectangle.FromLTRB(checkBoxBounds.Right + DepotRowIconMargin, item.Bounds.Top,
             item.Bounds.Right, item.Bounds.Bottom);
         if (_gamesWithADepotWithoutFiles.Contains(game))
@@ -501,9 +536,38 @@ internal sealed class MainForm : Form
         if (cell.ColumnIndex is BrowseContentFolderColumn or RemoveDepotColumn)
         {
             Bitmap icon = cell.ColumnIndex == BrowseContentFolderColumn ? _folderIcon : _trashIcon;
-            cell.Paint(cell.ClipBounds, DataGridViewPaintParts.All & ~DataGridViewPaintParts.ContentForeground);
+            if (DarkMode.IsOn)
+            {
+                cell.Paint(cell.ClipBounds, DataGridViewPaintParts.All & ~DataGridViewPaintParts.ContentForeground
+                    & ~DataGridViewPaintParts.ContentBackground);
+                DarkMode.DrawPushButton(cell.Graphics, DepotRowButtonBounds(cell.CellBounds),
+                    DepotRowButtonState(cell.CellBounds));
+            }
+            else
+            {
+                cell.Paint(cell.ClipBounds, DataGridViewPaintParts.All & ~DataGridViewPaintParts.ContentForeground);
+            }
+
             DrawIconInDepotRow(cell, icon, cell.CellBounds.Left + (cell.CellBounds.Width - icon.Width) / 2);
         }
+    }
+
+    private static Rectangle DepotRowButtonBounds(Rectangle cellBounds)
+    {
+        const int gridLinePixels = 1;
+
+        return new Rectangle(cellBounds.Left, cellBounds.Top, cellBounds.Width - gridLinePixels,
+            cellBounds.Height - gridLinePixels);
+    }
+
+    private PushButtonState DepotRowButtonState(Rectangle cellBounds)
+    {
+        if (!cellBounds.Contains(_depotGrid.PointToClient(MousePosition)))
+        {
+            return PushButtonState.Normal;
+        }
+
+        return MouseButtons == MouseButtons.Left ? PushButtonState.Pressed : PushButtonState.Hot;
     }
 
     private static void DrawIconInDepotRow(DataGridViewCellPaintingEventArgs cell, Bitmap icon, int left)

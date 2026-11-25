@@ -67,6 +67,7 @@ internal sealed class UploadConfirmationForm : Form
         layout.Controls.Add(_detailsBox, 0, 1);
         layout.Controls.Add(_buttons, 0, 2);
         Controls.Add(layout);
+        DarkMode.ApplyToNewWindow(this);
         ActiveControl = confirmButton;
         ResumeLayout();
     }

@@ -1,3 +1,5 @@
+using System.Windows.Forms.VisualStyles;
+
 namespace DepotUploader;
 
 internal sealed class IconButton : Button
@@ -34,7 +36,15 @@ internal sealed class IconButton : Button
 
     protected override void OnPaint(PaintEventArgs paint)
     {
-        base.OnPaint(paint);
+        if (DarkMode.IsOn)
+        {
+            PaintDarkButtonWithText(paint.Graphics);
+        }
+        else
+        {
+            base.OnPaint(paint);
+        }
+
         if (_icon is null)
         {
             return;
@@ -49,6 +59,35 @@ internal sealed class IconButton : Button
         {
             ControlPaint.DrawImageDisabled(paint.Graphics, _icon, SpaceLeftOfIcon, top, BackColor);
         }
+    }
+
+    private void PaintDarkButtonWithText(Graphics graphics)
+    {
+        graphics.Clear(BackColor);
+        DarkMode.DrawPushButton(graphics, ClientRectangle, DarkButtonState());
+        TextRenderer.DrawText(graphics, Text, Font, ClientRectangle,
+            Enabled ? DarkMode.TextColor : DarkMode.DisabledTextColor,
+            TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
+        if (Focused && ShowFocusCues)
+        {
+            ControlPaint.DrawFocusRectangle(graphics, Rectangle.Inflate(ClientRectangle, -3, -3),
+                DarkMode.TextColor, BackColor);
+        }
+    }
+
+    private PushButtonState DarkButtonState()
+    {
+        if (!Enabled)
+        {
+            return PushButtonState.Disabled;
+        }
+
+        if (ClientRectangle.Contains(PointToClient(MousePosition)))
+        {
+            return Capture ? PushButtonState.Pressed : PushButtonState.Hot;
+        }
+
+        return Focused || IsDefault ? PushButtonState.Default : PushButtonState.Normal;
     }
 
     protected override void Dispose(bool disposing)

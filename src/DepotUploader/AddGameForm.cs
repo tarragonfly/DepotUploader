@@ -49,6 +49,7 @@ internal sealed class AddGameForm : Form
         layout.Controls.Add(buttons, 0, 3);
         layout.SetColumnSpan(buttons, 2);
         Controls.Add(layout);
+        DarkMode.ApplyToNewWindow(this);
         ResumeLayout();
     }
 

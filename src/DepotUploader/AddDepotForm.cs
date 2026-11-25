@@ -46,6 +46,7 @@ internal sealed class AddDepotForm : Form
         layout.Controls.Add(buttons, 0, 1);
         layout.SetColumnSpan(buttons, 2);
         Controls.Add(layout);
+        DarkMode.ApplyToNewWindow(this);
         ResumeLayout();
     }
 
