@@ -49,8 +49,10 @@ internal static class SteamCmd
 
             Task exitAndEndOfOutput = Task.Run(() => process.WaitForExit());
             TaskCompletionSource<bool> endedEveryProcessOfJob = new TaskCompletionSource<bool>();
+            bool steamCmdAndItsOutputEndedBeforeTheStop = false;
             using (cancellation.Register(() =>
                    {
+                       steamCmdAndItsOutputEndedBeforeTheStop = exitAndEndOfOutput.IsCompleted;
                        bool terminatedJob = steamCmdIsInJob && TerminateJobObject(jobOfSteamCmdAndItsChildren, 1);
                        if (!terminatedJob)
                        {
@@ -67,6 +69,11 @@ internal static class SteamCmd
 
                     return process.ExitCode;
                 }
+            }
+
+            if (steamCmdAndItsOutputEndedBeforeTheStop)
+            {
+                return process.ExitCode;
             }
 
             bool sawExitAndEndOfOutput =
