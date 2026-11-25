@@ -9,6 +9,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Version>1.1.0</Version>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>DepotUploader.ico</ApplicationIcon>
     <GenerateSupportedRuntime>false</GenerateSupportedRuntime>
     <AutoGenerateBindingRedirects>false</AutoGenerateBindingRedirects>
   </PropertyGroup>
@@ -19,6 +20,7 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="DepotUploader.Tests" />
+    <EmbeddedResource Include="DepotUploader.ico" LogicalName="DepotUploader.ico" />
   </ItemGroup>
 
 </Project>

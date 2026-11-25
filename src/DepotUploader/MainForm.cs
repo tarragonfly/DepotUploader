@@ -67,6 +67,7 @@ internal sealed class MainForm : Form
         AutoScaleDimensions = new SizeF(96f, 96f);
         AutoScaleMode = AutoScaleMode.Dpi;
         Text = "Depot Uploader";
+        Icon = new Icon(typeof(MainForm).Assembly.GetManifestResourceStream("DepotUploader.ico")!);
         Font = SystemFonts.MessageBoxFont;
         ClientSize = new Size(1100, 760);
         MinimumSize = new Size(800, 600);
@@ -491,7 +492,7 @@ internal sealed class MainForm : Form
             return;
         }
 
-        using AddDepotForm dialog = new AddDepotForm();
+        using AddDepotForm dialog = new AddDepotForm { Icon = Icon };
         if (dialog.ShowDialog(this) != DialogResult.OK)
         {
             return;
@@ -719,7 +720,7 @@ internal sealed class MainForm : Form
             return;
         }
 
-        using AddGameForm dialog = new AddGameForm();
+        using AddGameForm dialog = new AddGameForm { Icon = Icon };
         if (dialog.ShowDialog(this) != DialogResult.OK)
         {
             return;
