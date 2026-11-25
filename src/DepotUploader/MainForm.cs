@@ -1,5 +1,7 @@
 using System.ComponentModel;
 using System.Diagnostics;
+using System.Globalization;
+using System.Windows.Forms.VisualStyles;
 
 namespace DepotUploader;
 
@@ -17,6 +19,7 @@ internal sealed class MainForm : Form
     private readonly UploaderSettings _settings;
     private readonly List<AppBuildScript> _games = new List<AppBuildScript>();
     private readonly HashSet<AppBuildScript> _gamesWithADepotWithoutFiles = new HashSet<AppBuildScript>();
+    private readonly HashSet<string> _scriptPathsOfTickedGames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
     private readonly TextBox _contentBuilderPathBox = new TextBox { Dock = DockStyle.Fill };
     private readonly TextBox _steamLoginBox = new TextBox { Dock = DockStyle.Fill };
@@ -32,6 +35,11 @@ internal sealed class MainForm : Form
         IntegralHeight = false,
         FormattingEnabled = true,
         DrawMode = DrawMode.OwnerDrawFixed,
+    };
+    private readonly IconButton _uploadTickedGamesButton = new IconButton("Upload ticked games", "upload")
+    {
+        Dock = DockStyle.Bottom,
+        Enabled = false,
     };
     private readonly IconButton _removeGameButton = new IconButton("Remove game", "trash") { Dock = DockStyle.Bottom };
     private readonly TextBox _gameNameBox = new TextBox { Dock = DockStyle.Fill };
@@ -50,7 +58,12 @@ internal sealed class MainForm : Form
         Margin = new Padding(12, 3, 0, 3),
         Visible = false,
     };
-    private readonly Label _uploadResultLabel = new Label { AutoSize = true, Anchor = AnchorStyles.Left };
+    private readonly Label _uploadResultLabel = new Label
+    {
+        AutoSize = true,
+        Anchor = AnchorStyles.Left,
+        UseMnemonic = false,
+    };
     private readonly ToolTip _namesOfIcons = new ToolTip();
     private readonly int _textLineIconPixels = SystemFonts.MessageBoxFont.Height;
     private readonly Bitmap _stopIcon;
@@ -133,6 +146,8 @@ internal sealed class MainForm : Form
         _gameList.Format += (_, item) => item.Value = GameListText((AppBuildScript)item.ListItem);
         _gameList.DrawItem += (_, item) => DrawGameListItem(item);
         _gameList.SelectedIndexChanged += (_, _) => SwitchToSelectedGame();
+        _gameList.MouseDown += (_, mouse) => TickOrUntickGameWhoseCheckBoxIsClicked(mouse);
+        _gameList.KeyDown += (_, key) => TickOrUntickSelectedGameOnSpace(key);
         FormClosing += (_, closing) => SaveEditsAndSettingsOrCancelClosing(closing);
         Shown += (_, _) => ReloadGames();
     }
@@ -175,6 +190,7 @@ internal sealed class MainForm : Form
         IconButton addGameButton = new IconButton("Add game", "add") { Dock = DockStyle.Bottom };
         addGameButton.Click += (_, _) => AddGame();
         _removeGameButton.Click += (_, _) => RemoveShownGame();
+        _uploadTickedGamesButton.Click += async (_, _) => await UploadTickedGamesAsync();
         _gameSortOrderBox.Items.AddRange(new object[] { "Name A-Z", "Last build first", "Recently added first" });
 
         TableLayoutPanel filterAndSortOrder = new TableLayoutPanel
@@ -195,12 +211,14 @@ internal sealed class MainForm : Form
         Panel panel = new Panel { Dock = DockStyle.Fill, Padding = new Padding(8) };
         panel.Controls.Add(_gameList);
         panel.Controls.Add(filterAndSortOrder);
+        panel.Controls.Add(_uploadTickedGamesButton);
         panel.Controls.Add(addGameButton);
         panel.Controls.Add(_removeGameButton);
         filterAndSortOrder.TabIndex = 0;
         _gameList.TabIndex = 1;
-        addGameButton.TabIndex = 2;
-        _removeGameButton.TabIndex = 3;
+        _uploadTickedGamesButton.TabIndex = 2;
+        addGameButton.TabIndex = 3;
+        _removeGameButton.TabIndex = 4;
 
         return panel;
     }
@@ -338,7 +356,14 @@ internal sealed class MainForm : Form
 
         item.DrawBackground();
         AppBuildScript game = (AppBuildScript)_gameList.Items[item.Index];
-        Rectangle textBounds = item.Bounds;
+        Rectangle checkBoxBounds = GameCheckBoxBounds(item.Graphics, item.Bounds);
+        item.Graphics.FillRectangle(SystemBrushes.Window, Rectangle.Inflate(checkBoxBounds, 1, 1));
+        CheckBoxRenderer.DrawCheckBox(item.Graphics, checkBoxBounds.Location,
+            _scriptPathsOfTickedGames.Contains(game.FilePath)
+                ? CheckBoxState.CheckedNormal
+                : CheckBoxState.UncheckedNormal);
+        Rectangle textBounds = Rectangle.FromLTRB(checkBoxBounds.Right + DepotRowIconMargin, item.Bounds.Top,
+            item.Bounds.Right, item.Bounds.Bottom);
         if (_gamesWithADepotWithoutFiles.Contains(game))
         {
             textBounds.Width -= _gameListWarningIcon.Width + 2 * DepotRowIconMargin;
@@ -351,6 +376,74 @@ internal sealed class MainForm : Form
             TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis
             | TextFormatFlags.NoPrefix);
         item.DrawFocusRectangle();
+    }
+
+    private static Rectangle GameCheckBoxBounds(Graphics graphics, Rectangle rowBounds)
+    {
+        Size checkBoxSize = CheckBoxRenderer.GetGlyphSize(graphics, CheckBoxState.UncheckedNormal);
+
+        return new Rectangle(rowBounds.Left + DepotRowIconMargin,
+            rowBounds.Top + (rowBounds.Height - checkBoxSize.Height) / 2, checkBoxSize.Width, checkBoxSize.Height);
+    }
+
+    private void TickOrUntickGameWhoseCheckBoxIsClicked(MouseEventArgs mouse)
+    {
+        int rowIndex = _gameList.IndexFromPoint(mouse.Location);
+        if (mouse.Button != MouseButtons.Left || rowIndex < 0 || rowIndex >= _gameList.Items.Count)
+        {
+            return;
+        }
+
+        using Graphics graphics = _gameList.CreateGraphics();
+        Rectangle checkBoxBounds = GameCheckBoxBounds(graphics, _gameList.GetItemRectangle(rowIndex));
+        if (mouse.X <= checkBoxBounds.Right + DepotRowIconMargin)
+        {
+            TickOrUntick((AppBuildScript)_gameList.Items[rowIndex]);
+        }
+    }
+
+    private void TickOrUntickSelectedGameOnSpace(KeyEventArgs key)
+    {
+        if (key.KeyCode == Keys.Space && _gameList.SelectedItem is AppBuildScript game)
+        {
+            TickOrUntick(game);
+            key.Handled = true;
+            key.SuppressKeyPress = true;
+        }
+    }
+
+    private void TickOrUntick(AppBuildScript game)
+    {
+        if (!_scriptPathsOfTickedGames.Remove(game.FilePath))
+        {
+            _scriptPathsOfTickedGames.Add(game.FilePath);
+        }
+
+        _gameList.Invalidate();
+        ShowWhichUploadsCanStart();
+    }
+
+    private AppBuildScript[] TickedGamesInListOrder()
+    {
+        IEnumerable<AppBuildScript> tickedGames =
+            _games.Where(game => _scriptPathsOfTickedGames.Contains(game.FilePath));
+
+        return ListedGames.MatchingFilterInSortOrder(tickedGames, GameListText, string.Empty, _settings.GameSortOrder)
+            .ToArray();
+    }
+
+    private void ShowWhichUploadsCanStart()
+    {
+        int tickedGameCount = _games.Count(game => _scriptPathsOfTickedGames.Contains(game.FilePath));
+        bool noUploadIsRunning = _uploadCancellation is null;
+        _uploadButton.Enabled = _shownGame is not null && noUploadIsRunning;
+        _uploadTickedGamesButton.Enabled = tickedGameCount > 0 && noUploadIsRunning;
+        _uploadTickedGamesButton.Text = tickedGameCount switch
+        {
+            0 => "Upload ticked games",
+            1 => "Upload 1 ticked game",
+            _ => $"Upload {tickedGameCount} ticked games",
+        };
     }
 
     private async void ShowWhichGamesHaveADepotWithoutFiles()
@@ -420,7 +513,7 @@ internal sealed class MainForm : Form
         cell.Handled = true;
     }
 
-    private void ShowUploadResult(Bitmap? icon, string text)
+    private void ShowUploadResult(Image? icon, string text)
     {
         _uploadResultIcon.Image = icon;
         _uploadResultIcon.Visible = icon is not null;
@@ -499,6 +592,7 @@ internal sealed class MainForm : Form
 
         _contentBuilder = contentBuilder;
         _games.AddRange(contentBuilder.LoadAppBuildScripts(out List<string> scriptLoadErrors));
+        _scriptPathsOfTickedGames.IntersectWith(_games.Select(game => game.FilePath));
         AppendLog($"Found {_games.Count} game(s) in {contentBuilder.ScriptsFolder}.");
         foreach (string scriptLoadError in scriptLoadErrors)
         {
@@ -596,7 +690,7 @@ internal sealed class MainForm : Form
         _uploadsNothingBox.Enabled = hasGame;
         _depotGrid.Enabled = hasGame;
         _addDepotButton.Enabled = hasGame;
-        _uploadButton.Enabled = hasGame && _uploadCancellation is null;
+        ShowWhichUploadsCanStart();
         if (game is null)
         {
             _gameNameBox.Text = string.Empty;
@@ -732,16 +826,8 @@ internal sealed class MainForm : Form
         string folder = ContentFolderInRow(row);
         string absoluteFolder = _shownGame!.AbsoluteContentFolder(DepotInRow(row), folder);
         row.Cells[ContentSummaryColumn].Value = "Counting files...";
-        ContentFolderSummary summary;
-        try
-        {
-            summary = await Task.Run(() => ContentFolderSummary.Describe(absoluteFolder));
-        }
-        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
-        {
-            summary = new ContentFolderSummary(exception.Message, HasFiles: false);
-        }
-
+        ContentFolderSummary summary =
+            await Task.Run(() => ContentFolderSummary.DescribeOrGiveReadError(absoluteFolder));
         if (IsDisposed || row.DataGridView is null || ContentFolderInRow(row) != folder)
         {
             return;
@@ -995,7 +1081,8 @@ internal sealed class MainForm : Form
     {
         if (_uploadCancellation is not null)
         {
-            AppendLog("Sign in is not available while steamcmd uploads. Its lines would appear in this log.");
+            AppendLog("Sign in is not available while an upload is prepared or runs. "
+                + "The lines of steamcmd would appear in this log.");
 
             return;
         }
@@ -1032,14 +1119,32 @@ internal sealed class MainForm : Form
 
     private async Task UploadShownGameAsync()
     {
+        if (_shownGame is not null)
+        {
+            await UploadGamesAsync(new[] { _shownGame });
+        }
+    }
+
+    private async Task UploadTickedGamesAsync()
+    {
+        AppBuildScript[] games = TickedGamesInListOrder();
+        if (games.Length > 0)
+        {
+            await UploadGamesAsync(games);
+        }
+    }
+
+    private async Task UploadGamesAsync(IReadOnlyList<AppBuildScript> games)
+    {
         _depotGrid.EndEdit();
-        if (_shownGame is null || !CanRunSteamCmdOrExplainWhyNot())
+        if (!CanRunSteamCmdOrExplainWhyNot())
         {
             return;
         }
 
+        string steamCmdPath = _contentBuilder!.SteamCmdPath;
         if (_signInConsole is { HasExited: false } && string.Equals(_signInConsole.StartInfo.FileName,
-                _contentBuilder!.SteamCmdPath, StringComparison.OrdinalIgnoreCase))
+                steamCmdPath, StringComparison.OrdinalIgnoreCase))
         {
             MessageBox.Show(this, "Finish the sign-in in the steamcmd window or close that window, then upload.", Text,
                 MessageBoxButtons.OK, MessageBoxIcon.Information);
@@ -1047,113 +1152,273 @@ internal sealed class MainForm : Form
             return;
         }
 
-        if (!TrySaveShownGame(out string whyNotSaved))
+        foreach (AppBuildScript game in games)
         {
-            MessageBox.Show(this, $"The upload was not started because the build scripts were not saved. {whyNotSaved}",
-                Text, MessageBoxButtons.OK, MessageBoxIcon.Warning);
-
-            return;
-        }
-
-        SaveSettings();
-        AppBuildScript game = _shownGame;
-        ContentBuilderFolder contentBuilder = _contentBuilder!;
-        foreach (DepotBuildScript depot in game.Depots)
-        {
-            string contentFolder = game.AbsoluteContentFolder(depot);
-            if (!Directory.Exists(contentFolder))
+            if (!TrySaveBeforeUpload(game, out string whyNotSaved))
             {
-                MessageBox.Show(this, contentFolder.Length == 0
-                        ? $"Depot {depot.DepotId} has no content folder."
-                        : $"Depot {depot.DepotId} has no content folder at \"{contentFolder}\".",
+                MessageBox.Show(this,
+                    $"The upload was not started because the build scripts of {GameListText(game)} were not saved. "
+                    + whyNotSaved,
                     Text, MessageBoxButtons.OK, MessageBoxIcon.Warning);
 
                 return;
             }
         }
 
-        if (MessageBox.Show(this, UploadConfirmationText(game), Text, MessageBoxButtons.OKCancel,
-                MessageBoxIcon.Question) != DialogResult.OK)
-        {
-            return;
-        }
-
+        SaveSettings();
+        string steamLogin = _steamLoginBox.Text.Trim();
         string scriptCopiesFolder = Path.Combine(Path.GetTempPath(), "DepotUploader", Guid.NewGuid().ToString("N"));
-        string appScriptCopyPath;
-        try
-        {
-            appScriptCopyPath = game.WriteCopiesWithAbsolutePaths(scriptCopiesFolder);
-        }
-        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException
-            or InvalidOperationException)
-        {
-            DeleteScriptCopies(scriptCopiesFolder);
-            MessageBox.Show(this, $"The upload was not started. {exception.Message}", Text, MessageBoxButtons.OK,
-                MessageBoxIcon.Warning);
-
-            return;
-        }
-
-        string buildLogPath = game.BuildLogPath;
-        long buildLogLengthBefore = File.Exists(buildLogPath) ? new FileInfo(buildLogPath).Length : 0;
-        _uploadCancellation = new CancellationTokenSource();
-        _uploadButton.Enabled = false;
+        Image? resultIconOfLastUpload = _uploadResultIcon.Image;
+        string resultOfLastUpload = _uploadResultLabel.Text;
+        CancellationTokenSource uploadCancellation = new CancellationTokenSource();
+        _uploadCancellation = uploadCancellation;
         _stopButton.Enabled = true;
-        ShowUploadResult(null, string.Empty);
-        AppendLog($"Starting steamcmd for {_settings.GameName(game.AppId)} ({game.AppId}).");
-        string uploadOfGame = $"{(game.UploadsNothing ? "Preview build" : "Upload")} of {_settings.GameName(game.AppId)}";
-        Bitmap resultIcon = _failureIcon;
-        string result = "failed";
+        ShowWhichUploadsCanStart();
         try
         {
-            int exitCode = await SteamCmd.RunAppBuildAsync(contentBuilder.SteamCmdPath, _steamLoginBox.Text.Trim(),
-                appScriptCopyPath, AppendLogFromAnyThread, _uploadCancellation.Token);
-            AppendBuildLogWrittenAfter(buildLogPath, buildLogLengthBefore);
-            AppendLog(exitCode == 0
-                ? "steamcmd finished with exit code 0."
-                : $"steamcmd failed with exit code {exitCode}. If it could not sign in, use Sign in and upload again.");
-            if (exitCode == 0)
+            GameUpload[] uploads;
+            try
             {
-                resultIcon = _successIcon;
-                result = "finished";
+                uploads = games.Select((game, index) => GameUpload.FromScripts(game, _settings.GameName(game.AppId),
+                    Path.Combine(scriptCopiesFolder, (index + 1).ToString(CultureInfo.InvariantCulture)))).ToArray();
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException
+                or InvalidOperationException)
+            {
+                MessageBox.Show(this, $"The upload was not started. {exception.Message}", Text, MessageBoxButtons.OK,
+                    MessageBoxIcon.Warning);
+
+                return;
+            }
+
+            if (GameUpload.WhyTwoUploadsWouldSetTheSameBranchLive(uploads) is string whyNotStarted)
+            {
+                MessageBox.Show(this, $"The upload was not started. {whyNotStarted}", Text, MessageBoxButtons.OK,
+                    MessageBoxIcon.Warning);
+
+                return;
+            }
+
+            ShowUploadResult(null, "Counting files");
+            ContentFolderSummary[][]? confirmedContent;
+            try
+            {
+                confirmedContent =
+                    await GameUpload.DescribeContentUnlessStoppedAsync(uploads, uploadCancellation.Token);
+            }
+            catch (IOException exception)
+            {
+                if (!IsDisposed)
+                {
+                    ShowUploadResult(resultIconOfLastUpload, resultOfLastUpload);
+                    MessageBox.Show(this, $"The upload was not started. {exception.Message}", Text,
+                        MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                }
+
+                return;
+            }
+
+            if (IsDisposed)
+            {
+                return;
+            }
+
+            ShowUploadResult(resultIconOfLastUpload, resultOfLastUpload);
+            if (confirmedContent is null)
+            {
+                return;
+            }
+
+            using (UploadConfirmationForm confirmation = new UploadConfirmationForm(
+                       UploadConfirmation.Question(uploads), UploadConfirmation.Details(uploads, confirmedContent),
+                       uploads.All(upload => upload.UploadsNothing)) { Icon = Icon })
+            {
+                if (confirmation.ShowDialog(this) != DialogResult.OK)
+                {
+                    return;
+                }
+            }
+
+            ShowUploadResult(null, string.Empty);
+            UploadOutcome[] outcomes = Enumerable.Repeat(UploadOutcome.NotStarted, uploads.Length).ToArray();
+            string outcomeInResultLine = string.Empty;
+            bool triedToStartSteamCmd = false;
+            for (int i = 0; i < uploads.Length && !uploadCancellation.IsCancellationRequested; i++)
+            {
+                string positionInBatch = uploads.Length == 1 ? string.Empty : $", game {i + 1} of {uploads.Length}";
+                if (uploads.Length > 1 && !IsDisposed)
+                {
+                    ShowUploadResult(null, $"Game {i + 1} of {uploads.Length}: {uploads[i].GameName}");
+                }
+
+                bool triedToStartSteamCmdForThisGame;
+                (outcomes[i], outcomeInResultLine, triedToStartSteamCmdForThisGame) =
+                    await UploadGameUnlessItsFilesChangedAsync(uploads[i], confirmedContent[i], positionInBatch,
+                        steamCmdPath, steamLogin, uploadCancellation.Token);
+                triedToStartSteamCmd |= triedToStartSteamCmdForThisGame;
+            }
+
+            if (IsDisposed)
+            {
+                return;
+            }
+
+            string uploadOrPreview = uploads[0].UploadsNothing ? "Preview build" : "Upload";
+            ShowUploadResult(ResultIcon(outcomes), uploads.Length == 1
+                ? $"{uploadOrPreview} of {uploads[0].GameName} {outcomeInResultLine} at {DateTime.Now:HH:mm}"
+                : BatchResultLine.Text(
+                    uploads.Zip(outcomes, (upload, outcome) => (upload.GameName, outcome)).ToArray(), DateTime.Now));
+            bool shownGameIsSelectedInList = ReferenceEquals(_gameList.SelectedItem, _shownGame);
+            if (triedToStartSteamCmd && _settings.GameSortOrder == GameSortOrder.LastBuildFirst
+                && shownGameIsSelectedInList)
+            {
+                ListGames(_shownGame);
+            }
+        }
+        finally
+        {
+            uploadCancellation.Dispose();
+            _uploadCancellation = null;
+            DeleteScriptCopies(scriptCopiesFolder);
+            if (!IsDisposed)
+            {
+                _stopButton.Enabled = false;
+                ShowWhichUploadsCanStart();
+            }
+        }
+    }
+
+    private bool TrySaveBeforeUpload(AppBuildScript game, out string whyNotSaved)
+    {
+        if (ReferenceEquals(game, _shownGame))
+        {
+            return TrySaveShownGame(out whyNotSaved);
+        }
+
+        try
+        {
+            game.Save();
+        }
+        catch (Exception exception) when (exception is FormatException or IOException or UnauthorizedAccessException)
+        {
+            whyNotSaved = exception.Message;
+
+            return false;
+        }
+
+        whyNotSaved = string.Empty;
+
+        return true;
+    }
+
+    private async Task<(UploadOutcome Outcome, string OutcomeInResultLine, bool TriedToStartSteamCmd)>
+        UploadGameUnlessItsFilesChangedAsync(GameUpload upload, ContentFolderSummary[] confirmedContent,
+            string positionInBatch, string steamCmdPath, string steamLogin, CancellationToken stopRequested)
+    {
+        ContentFolderSummary[][]? contentNow;
+        try
+        {
+            contentNow = await GameUpload.DescribeContentUnlessStoppedAsync(new[] { upload }, stopRequested);
+        }
+        catch (IOException exception)
+        {
+            AppendLog($"{upload.GameName} ({upload.AppId}) was not uploaded. {exception.Message}");
+
+            return (UploadOutcome.Failed, "failed", false);
+        }
+
+        if (contentNow is null)
+        {
+            return (UploadOutcome.NotStarted, "stopped", false);
+        }
+
+        for (int i = 0; i < upload.Depots.Count; i++)
+        {
+            if (contentNow[0][i] != confirmedContent[i])
+            {
+                AppendLog($"{upload.GameName} ({upload.AppId}) was not uploaded. The files of depot "
+                    + $"{upload.Depots[i].DepotId} changed after the confirmation. Confirmed: "
+                    + $"{confirmedContent[i].TextWithExactSizeAndTime}. Now: {contentNow[0][i].TextWithExactSizeAndTime}.");
+
+                return (UploadOutcome.Failed, "failed", false);
+            }
+        }
+
+        AppendLog($"Starting steamcmd for {upload.GameName} ({upload.AppId}){positionInBatch}.");
+        long? buildLogLengthBefore = LengthOfFileOrNullWhenItCannotBeRead(upload.BuildLogPath);
+        try
+        {
+            int exitCode = await SteamCmd.RunAppBuildAsync(steamCmdPath, steamLogin, upload.AppScriptCopyPath,
+                AppendLogFromAnyThread, stopRequested);
+            if (buildLogLengthBefore is long lengthBefore)
+            {
+                AppendBuildLogWrittenAfter(upload.BuildLogPath, lengthBefore);
             }
             else
             {
-                result = $"failed with exit code {exitCode}";
+                AppendLog($"{Path.GetFileName(upload.BuildLogPath)} is not shown here. Its length could not be "
+                    + "read before steamcmd started.");
             }
+
+            AppendLog(exitCode == 0
+                ? "steamcmd finished with exit code 0."
+                : $"steamcmd failed with exit code {exitCode}. If it could not sign in, use Sign in and upload again.");
+
+            return exitCode == 0
+                ? (UploadOutcome.Finished, "finished", true)
+                : (UploadOutcome.Failed, $"failed with exit code {exitCode}", true);
         }
         catch (OperationCanceledException)
         {
-            AppendLog("Stopped steamcmd.");
-            resultIcon = _stopIcon;
-            result = "stopped";
+            AppendLog("Stopped steamcmd. If the upload was almost done, the build may still be in Steamworks.");
+
+            return (UploadOutcome.Stopped, "stopped", true);
         }
         catch (SteamCmdNotStoppedException exception)
         {
             AppendLog(exception.Message);
+
+            return (UploadOutcome.Failed, "failed", true);
         }
         catch (Exception exception) when (exception is IOException or InvalidOperationException
             or Win32Exception)
         {
             AppendLog($"steamcmd could not be started. {exception.Message}");
+
+            return (UploadOutcome.Failed, "failed", true);
         }
-        finally
+    }
+
+    private static long? LengthOfFileOrNullWhenItCannotBeRead(string filePath)
+    {
+        try
         {
-            _uploadCancellation.Dispose();
-            _uploadCancellation = null;
-            DeleteScriptCopies(scriptCopiesFolder);
-            if (!IsDisposed)
-            {
-                ShowUploadResult(resultIcon, $"{uploadOfGame} {result} at {DateTime.Now:HH:mm}");
-                _stopButton.Enabled = false;
-                _uploadButton.Enabled = _shownGame is not null;
-                bool shownGameIsSelectedInList = ReferenceEquals(_gameList.SelectedItem, _shownGame);
-                if (_settings.GameSortOrder == GameSortOrder.LastBuildFirst && shownGameIsSelectedInList)
-                {
-                    ListGames(_shownGame);
-                }
-            }
+            return new FileInfo(filePath).Length;
         }
+        catch (Exception exception) when (exception is FileNotFoundException or DirectoryNotFoundException
+            or ArgumentException or NotSupportedException)
+        {
+            return 0;
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            return null;
+        }
+    }
+
+    private Bitmap ResultIcon(UploadOutcome[] outcomes)
+    {
+        if (outcomes.Contains(UploadOutcome.Stopped))
+        {
+            return _stopIcon;
+        }
+
+        if (outcomes.Contains(UploadOutcome.Failed))
+        {
+            return _failureIcon;
+        }
+
+        return outcomes.Contains(UploadOutcome.NotStarted) ? _stopIcon : _successIcon;
     }
 
     private void DeleteScriptCopies(string scriptCopiesFolder)
@@ -1169,26 +1434,6 @@ internal sealed class MainForm : Form
         {
             AppendLog($"The script copies in {scriptCopiesFolder} were not deleted. {exception.Message}");
         }
-    }
-
-    private string UploadConfirmationText(AppBuildScript game)
-    {
-        List<string> lines = new List<string>
-        {
-            game.UploadsNothing
-                ? $"Run a preview build of {_settings.GameName(game.AppId)} ({game.AppId})? Nothing is uploaded."
-                : $"Upload {_settings.GameName(game.AppId)} ({game.AppId}) to Steam?",
-            string.Empty,
-            $"Description: {game.Description}",
-            game.LiveBranch.Length == 0 ? "Set live: no" : $"Set live on branch: {game.LiveBranch}",
-        };
-        foreach (DataGridViewRow row in _depotGrid.Rows)
-        {
-            lines.Add($"Depot {DepotInRow(row).DepotId}: {game.AbsoluteContentFolder(DepotInRow(row))}");
-            lines.Add($"    {row.Cells[ContentSummaryColumn].Value}");
-        }
-
-        return string.Join(Environment.NewLine, lines);
     }
 
     private void AppendBuildLogWrittenAfter(string buildLogPath, long lengthBefore)
