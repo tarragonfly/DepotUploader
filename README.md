@@ -8,7 +8,7 @@ Valve's SteamPipe GUI handles one game per window. Depot Uploader lists every ga
 
 ## Download
 
-Download `DepotUploader-<version>-win-x64.exe` from the [latest release](https://github.com/tarragonfly/DepotUploader/releases/latest). It's a single 129 KB exe.
+Download `DepotUploader-<version>-win-x64.exe` from the [latest release](https://github.com/tarragonfly/DepotUploader/releases/latest). It's a single 157 KB exe.
 
 Requirements:
 
