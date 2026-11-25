@@ -9,10 +9,14 @@ internal sealed class MainForm : Form
     private const int BrowseContentFolderColumn = 2;
     private const int ContentSummaryColumn = 3;
     private const int RemoveDepotColumn = 4;
+    private const int DepotRowIconMargin = 3;
+    private const string BrowseContentFolderButtonName = "Choose content folder";
+    private const string RemoveDepotButtonName = "Remove depot";
 
     private readonly string _settingsPath = UploaderSettings.DefaultFilePath;
     private readonly UploaderSettings _settings;
     private readonly List<AppBuildScript> _games = new List<AppBuildScript>();
+    private readonly HashSet<AppBuildScript> _gamesWithADepotWithoutFiles = new HashSet<AppBuildScript>();
 
     private readonly TextBox _contentBuilderPathBox = new TextBox { Dock = DockStyle.Fill };
     private readonly TextBox _steamLoginBox = new TextBox { Dock = DockStyle.Fill };
@@ -27,22 +31,35 @@ internal sealed class MainForm : Form
         Dock = DockStyle.Fill,
         IntegralHeight = false,
         FormattingEnabled = true,
+        DrawMode = DrawMode.OwnerDrawFixed,
     };
-    private readonly Button _removeGameButton = new Button
-    {
-        Text = "Remove game...",
-        Dock = DockStyle.Bottom,
-        AutoSize = true,
-    };
+    private readonly IconButton _removeGameButton = new IconButton("Remove game", "trash") { Dock = DockStyle.Bottom };
     private readonly TextBox _gameNameBox = new TextBox { Dock = DockStyle.Fill };
     private readonly TextBox _appIdBox = new TextBox { Dock = DockStyle.Fill, ReadOnly = true };
     private readonly TextBox _descriptionBox = new TextBox { Dock = DockStyle.Fill };
     private readonly TextBox _liveBranchBox = new TextBox { Dock = DockStyle.Fill };
     private readonly CheckBox _uploadsNothingBox = new CheckBox { Text = "Preview only, upload nothing", AutoSize = true };
     private readonly DataGridView _depotGrid = new DataGridView();
-    private readonly Button _addDepotButton = new Button { Text = "Add depot...", AutoSize = true };
-    private readonly Button _uploadButton = new Button { Text = "Upload", AutoSize = true };
-    private readonly Button _stopButton = new Button { Text = "Stop", AutoSize = true, Enabled = false };
+    private readonly IconButton _addDepotButton = new IconButton("Add depot", "add");
+    private readonly IconButton _uploadButton = new IconButton("Upload", "upload");
+    private readonly IconButton _stopButton = new IconButton("Stop", "stop") { Enabled = false };
+    private readonly PictureBox _uploadResultIcon = new PictureBox
+    {
+        SizeMode = PictureBoxSizeMode.AutoSize,
+        Anchor = AnchorStyles.Left,
+        Margin = new Padding(12, 3, 0, 3),
+        Visible = false,
+    };
+    private readonly Label _uploadResultLabel = new Label { AutoSize = true, Anchor = AnchorStyles.Left };
+    private readonly ToolTip _namesOfIcons = new ToolTip();
+    private readonly int _textLineIconPixels = SystemFonts.MessageBoxFont.Height;
+    private readonly Bitmap _stopIcon;
+    private readonly Bitmap _successIcon;
+    private readonly Bitmap _failureIcon;
+    private readonly Bitmap _folderIcon;
+    private readonly Bitmap _trashIcon;
+    private readonly Bitmap _warningIcon;
+    private readonly Bitmap _gameListWarningIcon;
     private readonly TextBox _logBox = new TextBox
     {
         Dock = DockStyle.Fill,
@@ -57,11 +74,21 @@ internal sealed class MainForm : Form
     private AppBuildScript? _shownGame;
     private CancellationTokenSource? _uploadCancellation;
     private Process? _signInConsole;
+    private Task<AppBuildScript[]>? _newestSearchForDepotsWithoutFiles;
     private bool _ignoreGameSelectionChange;
 
     public MainForm()
     {
         _settings = UploaderSettings.Load(_settingsPath, out string? settingsLoadError);
+        _stopIcon = TextLineIcon("stop");
+        _successIcon = TextLineIcon("success");
+        _failureIcon = TextLineIcon("failure");
+        _gameList.ItemHeight = RowHeightOfAStandardList(SystemFonts.MessageBoxFont);
+        _gameListWarningIcon = EmbeddedIcon.LargestThatFits("warning", _gameList.ItemHeight - 2);
+        int depotRowIconPixels = _depotGrid.RowTemplate.Height - 2 * DepotRowIconMargin;
+        _folderIcon = EmbeddedIcon.LargestThatFits("folder", depotRowIconPixels);
+        _trashIcon = EmbeddedIcon.LargestThatFits("trash", depotRowIconPixels);
+        _warningIcon = EmbeddedIcon.LargestThatFits("warning", depotRowIconPixels);
 
         SuspendLayout();
         AutoScaleDimensions = new SizeF(96f, 96f);
@@ -104,6 +131,7 @@ internal sealed class MainForm : Form
         _gameFilterBox.TextChanged += (_, _) => ListGames(_shownGame);
         _gameSortOrderBox.SelectedIndexChanged += (_, _) => SaveSortOrderAndListGames();
         _gameList.Format += (_, item) => item.Value = GameListText((AppBuildScript)item.ListItem);
+        _gameList.DrawItem += (_, item) => DrawGameListItem(item);
         _gameList.SelectedIndexChanged += (_, _) => SwitchToSelectedGame();
         FormClosing += (_, closing) => SaveEditsAndSettingsOrCancelClosing(closing);
         Shown += (_, _) => ReloadGames();
@@ -111,11 +139,11 @@ internal sealed class MainForm : Form
 
     private Control BuildSteamSetupPanel()
     {
-        Button browseButton = new Button { Text = "Browse...", AutoSize = true };
+        IconButton browseButton = new IconButton("Browse", "folder");
         browseButton.Click += (_, _) => BrowseContentBuilderFolder();
-        Button reloadButton = new Button { Text = "Reload", AutoSize = true, CausesValidation = false };
+        IconButton reloadButton = new IconButton("Reload", "reload") { CausesValidation = false };
         reloadButton.Click += (_, _) => ReloadGames();
-        Button signInButton = new Button { Text = "Sign in...", AutoSize = true };
+        IconButton signInButton = new IconButton("Sign in", "valve");
         signInButton.Click += (_, _) => OpenSignInConsole();
 
         TableLayoutPanel panel = new TableLayoutPanel
@@ -144,7 +172,7 @@ internal sealed class MainForm : Form
 
     private Control BuildGameListPanel()
     {
-        Button addGameButton = new Button { Text = "Add game...", Dock = DockStyle.Bottom, AutoSize = true };
+        IconButton addGameButton = new IconButton("Add game", "add") { Dock = DockStyle.Bottom };
         addGameButton.Click += (_, _) => AddGame();
         _removeGameButton.Click += (_, _) => RemoveShownGame();
         _gameSortOrderBox.Items.AddRange(new object[] { "Name A-Z", "Last build first", "Recently added first" });
@@ -159,9 +187,9 @@ internal sealed class MainForm : Form
         };
         filterAndSortOrder.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
         filterAndSortOrder.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        filterAndSortOrder.Controls.Add(NewLabel("Filter"), 0, 0);
+        filterAndSortOrder.Controls.Add(NewIconThatNames(_gameFilterBox, "filter", "Filter"), 0, 0);
         filterAndSortOrder.Controls.Add(_gameFilterBox, 1, 0);
-        filterAndSortOrder.Controls.Add(NewLabel("Sort by"), 0, 1);
+        filterAndSortOrder.Controls.Add(NewIconThatNames(_gameSortOrderBox, "sort", "Sort by"), 0, 1);
         filterAndSortOrder.Controls.Add(_gameSortOrderBox, 1, 1);
 
         Panel panel = new Panel { Dock = DockStyle.Fill, Padding = new Padding(8) };
@@ -197,14 +225,18 @@ internal sealed class MainForm : Form
             HeaderText = "Content folder",
             AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill,
         });
-        _depotGrid.Columns.Add(NewDepotRowButtonColumn("Browse..."));
+        _depotGrid.Columns.Add(NewDepotRowIconButtonColumn(BrowseContentFolderButtonName, _folderIcon));
         _depotGrid.Columns.Add(new DataGridViewTextBoxColumn
         {
             HeaderText = "Contents",
             ReadOnly = true,
             AutoSizeMode = DataGridViewAutoSizeColumnMode.AllCells,
+            DefaultCellStyle = new DataGridViewCellStyle
+            {
+                Padding = new Padding(_warningIcon.Width + 2 * DepotRowIconMargin, 0, 0, 0),
+            },
         });
-        _depotGrid.Columns.Add(NewDepotRowButtonColumn("X"));
+        _depotGrid.Columns.Add(NewDepotRowIconButtonColumn(RemoveDepotButtonName, _trashIcon));
         _depotGrid.CellEndEdit += (_, cell) =>
         {
             if (_shownGame is not null)
@@ -214,11 +246,13 @@ internal sealed class MainForm : Form
             }
         };
         _depotGrid.CellContentClick += (_, cell) => RunDepotRowButton(cell.RowIndex, cell.ColumnIndex);
+        _depotGrid.CellPainting += (_, cell) => PaintDepotRowIcon(cell);
 
         _gameNameBox.Validated += (_, _) => SaveShownGameWhenEdited();
         _descriptionBox.Validated += (_, _) => SaveShownGameWhenEdited();
         _liveBranchBox.Validated += (_, _) => SaveShownGameWhenEdited();
         _uploadsNothingBox.Click += (_, _) => SaveShownGameWhenEdited();
+        _uploadsNothingBox.CheckedChanged += (_, _) => ShowUploadOrPreviewOnUploadButton();
         _addDepotButton.Click += (_, _) => AddDepot();
         _uploadButton.Click += async (_, _) => await UploadShownGameAsync();
         _stopButton.Click += (_, _) => _uploadCancellation?.Cancel();
@@ -227,6 +261,8 @@ internal sealed class MainForm : Form
         buttons.Controls.Add(_addDepotButton);
         buttons.Controls.Add(_uploadButton);
         buttons.Controls.Add(_stopButton);
+        buttons.Controls.Add(_uploadResultIcon);
+        buttons.Controls.Add(_uploadResultLabel);
 
         TableLayoutPanel panel = new TableLayoutPanel
         {
@@ -266,15 +302,135 @@ internal sealed class MainForm : Form
         return new Label { Text = text, AutoSize = true, Anchor = AnchorStyles.Left };
     }
 
-    private static DataGridViewButtonColumn NewDepotRowButtonColumn(string buttonText)
+    private Bitmap TextLineIcon(string name)
+    {
+        return EmbeddedIcon.LargestThatFits(name, _textLineIconPixels);
+    }
+
+    private static int RowHeightOfAStandardList(Font font)
+    {
+        using ListBox standardList = new ListBox { Font = font };
+        standardList.CreateControl();
+
+        return standardList.ItemHeight;
+    }
+
+    private PictureBox NewIconThatNames(Control namedControl, string iconName, string name)
+    {
+        namedControl.AccessibleName = name;
+        PictureBox icon = new PictureBox
+        {
+            Image = TextLineIcon(iconName),
+            SizeMode = PictureBoxSizeMode.AutoSize,
+            Anchor = AnchorStyles.None,
+        };
+        _namesOfIcons.SetToolTip(icon, name);
+
+        return icon;
+    }
+
+    private void DrawGameListItem(DrawItemEventArgs item)
+    {
+        if (item.Index < 0)
+        {
+            return;
+        }
+
+        item.DrawBackground();
+        AppBuildScript game = (AppBuildScript)_gameList.Items[item.Index];
+        Rectangle textBounds = item.Bounds;
+        if (_gamesWithADepotWithoutFiles.Contains(game))
+        {
+            textBounds.Width -= _gameListWarningIcon.Width + 2 * DepotRowIconMargin;
+            int top = item.Bounds.Top + (item.Bounds.Height - _gameListWarningIcon.Height) / 2;
+            item.Graphics.DrawImage(_gameListWarningIcon, new Rectangle(textBounds.Right + DepotRowIconMargin, top,
+                _gameListWarningIcon.Width, _gameListWarningIcon.Height));
+        }
+
+        TextRenderer.DrawText(item.Graphics, _gameList.GetItemText(game), item.Font, textBounds, item.ForeColor,
+            TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis
+            | TextFormatFlags.NoPrefix);
+        item.DrawFocusRectangle();
+    }
+
+    private async void ShowWhichGamesHaveADepotWithoutFiles()
+    {
+        (AppBuildScript Game, string[] ContentFolders)[] gamesAndContentFolders = _games
+            .Select(game => (game, game.Depots.Select(depot => game.AbsoluteContentFolder(depot)).ToArray()))
+            .ToArray();
+        Task<AppBuildScript[]> search = Task.Run(() => gamesAndContentFolders
+            .Where(entry => entry.ContentFolders.Any(folder => !ContentFolderSummary.FolderHasFiles(folder)))
+            .Select(entry => entry.Game)
+            .ToArray());
+        _newestSearchForDepotsWithoutFiles = search;
+        AppBuildScript[] gamesWithADepotWithoutFiles = await search;
+        if (IsDisposed || search != _newestSearchForDepotsWithoutFiles)
+        {
+            return;
+        }
+
+        _gamesWithADepotWithoutFiles.Clear();
+        _gamesWithADepotWithoutFiles.UnionWith(gamesWithADepotWithoutFiles);
+        _gameList.Invalidate();
+    }
+
+    private static DataGridViewButtonColumn NewDepotRowIconButtonColumn(string buttonName, Bitmap icon)
     {
         return new DataGridViewButtonColumn
         {
             HeaderText = string.Empty,
-            Text = buttonText,
+            Text = buttonName,
             UseColumnTextForButtonValue = true,
-            AutoSizeMode = DataGridViewAutoSizeColumnMode.AllCells,
+            AutoSizeMode = DataGridViewAutoSizeColumnMode.None,
+            Resizable = DataGridViewTriState.False,
+            Width = icon.Width + 4 * DepotRowIconMargin,
         };
+    }
+
+    private void PaintDepotRowIcon(DataGridViewCellPaintingEventArgs cell)
+    {
+        if (cell.RowIndex < 0)
+        {
+            return;
+        }
+
+        if (cell.ColumnIndex == ContentSummaryColumn)
+        {
+            if (cell.Value is ContentFolderSummary { HasFiles: false })
+            {
+                cell.Paint(cell.ClipBounds, DataGridViewPaintParts.All);
+                DrawIconInDepotRow(cell, _warningIcon, cell.CellBounds.Left + DepotRowIconMargin);
+            }
+
+            return;
+        }
+
+        if (cell.ColumnIndex is BrowseContentFolderColumn or RemoveDepotColumn)
+        {
+            Bitmap icon = cell.ColumnIndex == BrowseContentFolderColumn ? _folderIcon : _trashIcon;
+            cell.Paint(cell.ClipBounds, DataGridViewPaintParts.All & ~DataGridViewPaintParts.ContentForeground);
+            DrawIconInDepotRow(cell, icon, cell.CellBounds.Left + (cell.CellBounds.Width - icon.Width) / 2);
+        }
+    }
+
+    private static void DrawIconInDepotRow(DataGridViewCellPaintingEventArgs cell, Bitmap icon, int left)
+    {
+        int top = cell.CellBounds.Top + (cell.CellBounds.Height - icon.Height) / 2;
+        cell.Graphics.DrawImage(icon, new Rectangle(left, top, icon.Width, icon.Height));
+        cell.Handled = true;
+    }
+
+    private void ShowUploadResult(Bitmap? icon, string text)
+    {
+        _uploadResultIcon.Image = icon;
+        _uploadResultIcon.Visible = icon is not null;
+        _uploadResultLabel.Text = text;
+    }
+
+    private void ShowUploadOrPreviewOnUploadButton()
+    {
+        _uploadButton.Text = _uploadsNothingBox.Checked ? "Preview" : "Upload";
+        _uploadButton.ShowIcon(_uploadsNothingBox.Checked ? "preview" : "upload");
     }
 
     private void RunDepotRowButton(int rowIndex, int columnIndex)
@@ -354,6 +510,8 @@ internal sealed class MainForm : Form
         {
             ShowGame(null);
         }
+
+        ShowWhichGamesHaveADepotWithoutFiles();
     }
 
     private string GameListText(AppBuildScript game)
@@ -479,7 +637,8 @@ internal sealed class MainForm : Form
     {
         DataGridViewRow row = _depotGrid.Rows[_depotGrid.Rows.Add(depot.DepotId, depot.ContentFolder)];
         row.Tag = depot;
-        row.Cells[RemoveDepotColumn].ToolTipText = "Remove depot";
+        row.Cells[BrowseContentFolderColumn].ToolTipText = BrowseContentFolderButtonName;
+        row.Cells[RemoveDepotColumn].ToolTipText = RemoveDepotButtonName;
         ShowContentSummary(row);
 
         return row;
@@ -516,6 +675,7 @@ internal sealed class MainForm : Form
         }
 
         _depotGrid.CurrentCell = AddDepotRow(depot).Cells[ContentFolderColumn];
+        ShowWhichGamesHaveADepotWithoutFiles();
         AppendLog($"Added depot {depot.DepotId} to {Path.GetFileName(game.FilePath)}. " + (usesExistingDepotScript
             ? $"It uses the {Path.GetFileName(depotScriptPath)} that was already in the scripts folder."
             : $"Wrote {Path.GetFileName(depotScriptPath)}."));
@@ -530,7 +690,7 @@ internal sealed class MainForm : Form
         string whereTheDepotScriptStays = string.Equals(depot.FilePath, depotScriptPathAddDepotUses,
             StringComparison.OrdinalIgnoreCase)
             ? $"{depotScriptName} stays in the scripts folder."
-            : $"Its script stays at {depot.FilePath}. Add depot... can't add that script back, because it only uses "
+            : $"Its script stays at {depot.FilePath}. Add depot can't add that script back, because it only uses "
             + $"{Path.GetFileName(depotScriptPathAddDepotUses)} next to the app script.";
         if (MessageBox.Show(this,
                 $"Remove depot {depot.DepotId} from {_settings.GameName(game.AppId)} ({game.AppId})? "
@@ -553,6 +713,7 @@ internal sealed class MainForm : Form
         }
 
         _depotGrid.Rows.Remove(row);
+        ShowWhichGamesHaveADepotWithoutFiles();
         AppendLog($"Removed depot {depot.DepotId} from {Path.GetFileName(game.FilePath)}. {depotScriptName} was kept.");
     }
 
@@ -571,14 +732,14 @@ internal sealed class MainForm : Form
         string folder = ContentFolderInRow(row);
         string absoluteFolder = _shownGame!.AbsoluteContentFolder(DepotInRow(row), folder);
         row.Cells[ContentSummaryColumn].Value = "Counting files...";
-        string summary;
+        ContentFolderSummary summary;
         try
         {
             summary = await Task.Run(() => ContentFolderSummary.Describe(absoluteFolder));
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
         {
-            summary = exception.Message;
+            summary = new ContentFolderSummary(exception.Message, HasFiles: false);
         }
 
         if (IsDisposed || row.DataGridView is null || ContentFolderInRow(row) != folder)
@@ -682,6 +843,11 @@ internal sealed class MainForm : Form
         }
 
         ShowSavedValues(game);
+        if (hasEdits)
+        {
+            ShowWhichGamesHaveADepotWithoutFiles();
+        }
+
         if (hasEdits && savedTheName)
         {
             AppendLog($"Saved the edits to {GameListText(game)}.");
@@ -933,7 +1099,11 @@ internal sealed class MainForm : Form
         _uploadCancellation = new CancellationTokenSource();
         _uploadButton.Enabled = false;
         _stopButton.Enabled = true;
+        ShowUploadResult(null, string.Empty);
         AppendLog($"Starting steamcmd for {_settings.GameName(game.AppId)} ({game.AppId}).");
+        string uploadOfGame = $"{(game.UploadsNothing ? "Preview build" : "Upload")} of {_settings.GameName(game.AppId)}";
+        Bitmap resultIcon = _failureIcon;
+        string result = "failed";
         try
         {
             int exitCode = await SteamCmd.RunAppBuildAsync(contentBuilder.SteamCmdPath, _steamLoginBox.Text.Trim(),
@@ -942,10 +1112,21 @@ internal sealed class MainForm : Form
             AppendLog(exitCode == 0
                 ? "steamcmd finished with exit code 0."
                 : $"steamcmd failed with exit code {exitCode}. If it could not sign in, use Sign in and upload again.");
+            if (exitCode == 0)
+            {
+                resultIcon = _successIcon;
+                result = "finished";
+            }
+            else
+            {
+                result = $"failed with exit code {exitCode}";
+            }
         }
         catch (OperationCanceledException)
         {
             AppendLog("Stopped steamcmd.");
+            resultIcon = _stopIcon;
+            result = "stopped";
         }
         catch (SteamCmdNotStoppedException exception)
         {
@@ -963,6 +1144,7 @@ internal sealed class MainForm : Form
             DeleteScriptCopies(scriptCopiesFolder);
             if (!IsDisposed)
             {
+                ShowUploadResult(resultIcon, $"{uploadOfGame} {result} at {DateTime.Now:HH:mm}");
                 _stopButton.Enabled = false;
                 _uploadButton.Enabled = _shownGame is not null;
                 bool shownGameIsSelectedInList = ReferenceEquals(_gameList.SelectedItem, _shownGame);

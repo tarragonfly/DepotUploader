@@ -17,9 +17,9 @@ internal sealed class AddDepotForm : Form
         MinimizeBox = false;
         ClientSize = new Size(320, 90);
 
-        Button addButton = new Button { Text = "Add", AutoSize = true };
+        IconButton addButton = new IconButton("Add", "add");
         addButton.Click += (_, _) => CloseWhenValid();
-        Button cancelButton = new Button { Text = "Cancel", AutoSize = true, DialogResult = DialogResult.Cancel };
+        IconButton cancelButton = new IconButton("Cancel") { DialogResult = DialogResult.Cancel };
         AcceptButton = addButton;
         CancelButton = cancelButton;
 

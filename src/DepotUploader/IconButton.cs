@@ -1,0 +1,63 @@
+namespace DepotUploader;
+
+internal sealed class IconButton : Button
+{
+    private static readonly int IconPixels = SystemFonts.MessageBoxFont.Height;
+    private static readonly int SpaceLeftOfIcon = IconPixels / 3;
+    private static readonly int SpaceBesideText = SpaceLeftOfIcon + IconPixels + IconPixels / 4;
+    private static readonly int ButtonHeight = IconPixels + 2 * (IconPixels * 3 / 8);
+
+    private Bitmap? _icon;
+
+    public IconButton(string text, string? iconName = null)
+    {
+        Text = text;
+        AutoSize = true;
+        AutoSizeMode = AutoSizeMode.GrowAndShrink;
+        if (iconName is not null)
+        {
+            ShowIcon(iconName);
+        }
+    }
+
+    public void ShowIcon(string iconName)
+    {
+        _icon?.Dispose();
+        _icon = EmbeddedIcon.LargestThatFits(iconName, IconPixels);
+        Invalidate();
+    }
+
+    public override Size GetPreferredSize(Size proposedSize)
+    {
+        return new Size(TextRenderer.MeasureText(Text, Font).Width + 2 * SpaceBesideText, ButtonHeight);
+    }
+
+    protected override void OnPaint(PaintEventArgs paint)
+    {
+        base.OnPaint(paint);
+        if (_icon is null)
+        {
+            return;
+        }
+
+        int top = (ClientSize.Height - _icon.Height) / 2;
+        if (Enabled)
+        {
+            paint.Graphics.DrawImage(_icon, new Rectangle(SpaceLeftOfIcon, top, _icon.Width, _icon.Height));
+        }
+        else
+        {
+            ControlPaint.DrawImageDisabled(paint.Graphics, _icon, SpaceLeftOfIcon, top, BackColor);
+        }
+    }
+
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing)
+        {
+            _icon?.Dispose();
+        }
+
+        base.Dispose(disposing);
+    }
+}

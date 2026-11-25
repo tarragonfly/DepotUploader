@@ -21,6 +21,7 @@
   <ItemGroup>
     <InternalsVisibleTo Include="DepotUploader.Tests" />
     <EmbeddedResource Include="DepotUploader.ico" LogicalName="DepotUploader.ico" />
+    <EmbeddedResource Include="Icons\*.png" LogicalName="Icons.%(Filename)%(Extension)" />
   </ItemGroup>
 
 </Project>

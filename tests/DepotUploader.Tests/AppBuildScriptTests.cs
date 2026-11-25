@@ -314,7 +314,8 @@ public class AppBuildScriptTests
         string absoluteFolder = game.AbsoluteContentFolder(game.Depots[0]);
 
         Assert.That(absoluteFolder, Is.EqualTo(@"\\?\" + Path.Combine(folder.ContentBuilderPath, "content")));
-        Assert.That(ContentFolderSummary.Describe(absoluteFolder), Is.EqualTo("Empty folder"));
+        Assert.That(ContentFolderSummary.Describe(absoluteFolder),
+            Is.EqualTo(new ContentFolderSummary("Empty folder", HasFiles: false)));
         Assert.That(game.Depots[1].FilePath, Is.EqualTo(@"\\?\" + Path.Combine(folder.ScriptsPath, "depot_2.vdf")));
     }
 
@@ -366,7 +367,8 @@ public class AppBuildScriptTests
         string absoluteFolder = game.AbsoluteContentFolder(game.Depots[0], contentFolder);
 
         Assert.That(absoluteFolder, Is.EqualTo(contentFolder));
-        Assert.That(ContentFolderSummary.Describe(absoluteFolder), Is.EqualTo("Folder not found"));
+        Assert.That(ContentFolderSummary.Describe(absoluteFolder),
+            Is.EqualTo(new ContentFolderSummary("Folder not found", HasFiles: false)));
     }
 
     [Test]
