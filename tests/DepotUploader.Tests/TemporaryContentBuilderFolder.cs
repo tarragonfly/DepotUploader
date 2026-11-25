@@ -42,6 +42,25 @@ internal sealed class TemporaryContentBuilderFolder : IDisposable
             + "\t}\r\n}");
     }
 
+    public string ContentFolderPath(string appId)
+    {
+        return Path.Combine(ContentBuilderPath, "content", appId);
+    }
+
+    public string WriteContentFolderWithTwoFiles(string appId)
+    {
+        string contentFolder = ContentFolderPath(appId);
+        Directory.CreateDirectory(contentFolder);
+        foreach (string fileName in new[] { "game.exe", "data.pak" })
+        {
+            string filePath = Path.Combine(contentFolder, fileName);
+            File.WriteAllText(filePath, "x");
+            File.SetLastWriteTimeUtc(filePath, new DateTime(2026, 5, 1, 12, 0, 10, DateTimeKind.Utc));
+        }
+
+        return contentFolder;
+    }
+
     public void Dispose()
     {
         Directory.Delete(ContentBuilderPath, true);

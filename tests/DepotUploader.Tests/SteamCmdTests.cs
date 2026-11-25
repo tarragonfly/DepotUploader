@@ -112,6 +112,40 @@ public class SteamCmdTests
     }
 
     [Test]
+    public void RunAppBuildAsync_ReturnsTheExitCodeWhenSteamCmdHadEndedBeforeTheStop()
+    {
+        using TemporaryContentBuilderFolder folder = new TemporaryContentBuilderFolder();
+        string steamCmdStandIn = folder.WriteScript("steamcmd-stand-in.cmd",
+            "@ping -n 2 127.0.0.1 >nul\r\n@exit /b 3\r\n");
+        using CancellationTokenSource cancellation = new CancellationTokenSource();
+        ContinuationsQueuedUntilRun continuations = new ContinuationsQueuedUntilRun();
+        SynchronizationContext? contextOfTheTest = SynchronizationContext.Current;
+        SynchronizationContext.SetSynchronizationContext(continuations);
+        try
+        {
+            Task<int> run = SteamCmd.RunAppBuildAsync(steamCmdStandIn, "builder_account", "app_100030.vdf",
+                _ => { }, cancellation.Token);
+            Assert.That(SpinWait.SpinUntil(() => continuations.Count > 0, TimeSpan.FromSeconds(10)), Is.True);
+            Assert.That(run.IsCompleted, Is.False);
+
+            cancellation.Cancel();
+            Assert.That(SpinWait.SpinUntil(() =>
+            {
+                continuations.RunQueued();
+
+                return run.IsCompleted;
+            }, TimeSpan.FromSeconds(10)), Is.True);
+
+            Assert.That(run.Status, Is.EqualTo(TaskStatus.RanToCompletion));
+            Assert.That(run.Result, Is.EqualTo(3));
+        }
+        finally
+        {
+            SynchronizationContext.SetSynchronizationContext(contextOfTheTest);
+        }
+    }
+
+    [Test]
     public void RunAppBuildAsync_StopsAChildProcessThatOutlivesTheProcessThatStartedIt()
     {
         using TemporaryContentBuilderFolder folder = new TemporaryContentBuilderFolder();
