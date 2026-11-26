@@ -8,7 +8,7 @@ Valve's SteamPipe GUI handles one game per window. Depot Uploader lists every ga
 
 ## Download
 
-Download `DepotUploader-<version>-win-x64.exe` from the [latest release](https://github.com/tarragonfly/DepotUploader/releases/latest). It's a single 163 KB exe.
+Download `DepotUploader-<version>-win-x64.exe` from the [latest release](https://github.com/tarragonfly/DepotUploader/releases/latest). It's a single 166 KB exe.
 
 Requirements:
 
@@ -48,7 +48,8 @@ There is no Save button. An edit is saved when you leave its field. **Upload** s
 - A save fails when a script changed on disk after the tool loaded it. Click **Reload** to read the scripts again. **Reload** discards unsaved edits.
 - When a failed save can't restore a file, the error names the `.previous` file that holds it. Rename that file to the original name.
 - Game names, the sort order, the ContentBuilder path and the Steam login name are saved in `%APPDATA%\DepotUploader\settings.json`. With two windows open, the last write wins.
-- Dark mode requires Windows 11. It's on at startup when Windows is set to dark app mode, and the **Dark mode** check box is not saved. Message boxes and the folder picker stay light.
+- Dark mode is on at startup, and the **Dark mode** check box is not saved. Windows draws the message boxes and the folder picker in its own colors. The title bar has the window color on Windows 11 only.
+- With Windows high contrast on, the controls have the look and the colors of Windows and there is no **Dark mode** check box. The high contrast setting is read at startup. Restart Depot Uploader after you turn it on or off.
 
 ## Build from source
 
