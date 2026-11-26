@@ -24,11 +24,7 @@ internal sealed class MainForm : Form
     private readonly TextBox _contentBuilderPathBox = new TextBox { Dock = DockStyle.Fill };
     private readonly TextBox _steamLoginBox = new TextBox { Dock = DockStyle.Fill };
     private readonly TextBox _gameFilterBox = new TextBox { Dock = DockStyle.Fill };
-    private readonly ComboBox _gameSortOrderBox = new ComboBox
-    {
-        Dock = DockStyle.Fill,
-        DropDownStyle = ComboBoxStyle.DropDownList,
-    };
+    private readonly IconDropDownList _gameSortOrderBox = new IconDropDownList("sort") { Dock = DockStyle.Fill };
     private readonly ListBox _gameList = new ListBox
     {
         Dock = DockStyle.Fill,
@@ -38,31 +34,31 @@ internal sealed class MainForm : Form
     };
     private readonly IconButton _uploadTickedGamesButton = new IconButton("Upload ticked games", "upload")
     {
-        Dock = DockStyle.Bottom,
+        Dock = DockStyle.Fill,
         Enabled = false,
     };
-    private readonly IconButton _removeGameButton = new IconButton("Remove game", "trash") { Dock = DockStyle.Bottom };
+    private readonly IconButton _removeGameButton = new IconButton("Remove game", "trash") { Dock = DockStyle.Fill };
     private readonly TextBox _gameNameBox = new TextBox { Dock = DockStyle.Fill };
     private readonly TextBox _appIdBox = new TextBox { Dock = DockStyle.Fill, ReadOnly = true };
     private readonly TextBox _descriptionBox = new TextBox { Dock = DockStyle.Fill };
     private readonly TextBox _liveBranchBox = new TextBox { Dock = DockStyle.Fill };
-    private readonly LightOrDarkCheckBox _uploadsNothingBox = new LightOrDarkCheckBox
+    private readonly ThemeCheckBox _uploadsNothingBox = new ThemeCheckBox
     {
         Text = "Preview only, upload nothing",
         AutoSize = true,
     };
-    private readonly LightOrDarkCheckBox _darkModeBox = new LightOrDarkCheckBox
+    private readonly ThemeCheckBox _darkModeBox = new ThemeCheckBox
     {
         Text = "Dark mode",
         AutoSize = true,
         Anchor = AnchorStyles.Left,
-        Checked = DarkMode.IsOn,
+        Checked = WindowTheme.IsDark,
     };
     private readonly DataGridView _depotGrid = new DataGridView();
     private readonly IconButton _addDepotButton = new IconButton("Add depot", "add");
     private readonly IconButton _uploadButton = new IconButton("Upload", "upload");
     private readonly IconButton _stopButton = new IconButton("Stop", "stop") { Enabled = false };
-    private readonly PictureBox _uploadResultIcon = new PictureBox
+    private readonly PictureBox _uploadResultMark = new PictureBox
     {
         SizeMode = PictureBoxSizeMode.AutoSize,
         Anchor = AnchorStyles.Left,
@@ -76,14 +72,12 @@ internal sealed class MainForm : Form
         UseMnemonic = false,
     };
     private readonly ToolTip _namesOfIcons = new ToolTip();
-    private readonly int _textLineIconPixels = SystemFonts.MessageBoxFont.Height;
-    private readonly Bitmap _stopIcon;
-    private readonly Bitmap _successIcon;
-    private readonly Bitmap _failureIcon;
-    private readonly Bitmap _folderIcon;
-    private readonly Bitmap _trashIcon;
-    private readonly Bitmap _warningIcon;
-    private readonly Bitmap _gameListWarningIcon;
+    private readonly Bitmap _stoppedMark = StatusMark("stop", ThemeColors.WarningFill);
+    private readonly Bitmap _successMark = StatusMark("success", ThemeColors.SuccessFill);
+    private readonly Bitmap _failureMark = StatusMark("failure", ThemeColors.FailureFill);
+    private readonly Bitmap _warningMark = StatusMark("warning", ThemeColors.WarningFill);
+    private readonly Bitmap _folderIcon = EmbeddedIcon.LargestThatFits("folder", WindowTheme.LineHeight);
+    private readonly Bitmap _trashIcon = EmbeddedIcon.LargestThatFits("trash", WindowTheme.LineHeight);
     private readonly TextBox _logBox = new TextBox
     {
         Dock = DockStyle.Fill,
@@ -104,15 +98,13 @@ internal sealed class MainForm : Form
     public MainForm()
     {
         _settings = UploaderSettings.Load(_settingsPath, out string? settingsLoadError);
-        _stopIcon = TextLineIcon("stop");
-        _successIcon = TextLineIcon("success");
-        _failureIcon = TextLineIcon("failure");
-        _gameList.ItemHeight = RowHeightOfAStandardList(SystemFonts.MessageBoxFont);
-        _gameListWarningIcon = EmbeddedIcon.LargestThatFits("warning", _gameList.ItemHeight - 2);
-        int depotRowIconPixels = _depotGrid.RowTemplate.Height - 2 * DepotRowIconMargin;
-        _folderIcon = EmbeddedIcon.LargestThatFits("folder", depotRowIconPixels);
-        _trashIcon = EmbeddedIcon.LargestThatFits("trash", depotRowIconPixels);
-        _warningIcon = EmbeddedIcon.LargestThatFits("warning", depotRowIconPixels);
+        _gameList.ItemHeight = WindowTheme.ControlHeight;
+        _depotGrid.RowTemplate.Height = WindowTheme.ControlHeight;
+        if (WindowTheme.DrawsControls)
+        {
+            _namesOfIcons.OwnerDraw = true;
+            _namesOfIcons.Draw += (_, tooltip) => WindowTheme.DrawTooltip(tooltip);
+        }
 
         SuspendLayout();
         AutoScaleDimensions = new SizeF(96f, 96f);
@@ -137,10 +129,10 @@ internal sealed class MainForm : Form
         windowLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 40));
         windowLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         windowLayout.Controls.Add(gamesAndDetails, 0, 0);
-        windowLayout.Controls.Add(_logBox, 0, 1);
+        windowLayout.Controls.Add(new RoundedFrame(_logBox) { Margin = new Padding(11, 0, 11, 0) }, 0, 1);
         windowLayout.Controls.Add(BuildSteamSetupPanel(), 0, 2);
         Controls.Add(windowLayout);
-        DarkMode.ApplyToNewWindow(this);
+        WindowTheme.ApplyToNewWindow(this);
         ResumeLayout();
         Size workingAreaSize = Screen.FromPoint(MousePosition).WorkingArea.Size;
         Size = new Size(Math.Min(Width, workingAreaSize.Width), Math.Min(Height, workingAreaSize.Height));
@@ -187,68 +179,64 @@ internal sealed class MainForm : Form
         panel.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
         panel.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
         panel.Controls.Add(NewLabel("ContentBuilder folder"), 0, 0);
-        panel.Controls.Add(_contentBuilderPathBox, 1, 0);
+        panel.Controls.Add(new TextFieldFrame(_contentBuilderPathBox), 1, 0);
         panel.Controls.Add(browseButton, 2, 0);
         panel.Controls.Add(reloadButton, 3, 0);
         panel.Controls.Add(NewLabel("Steam login"), 0, 1);
-        panel.Controls.Add(_steamLoginBox, 1, 1);
+        panel.Controls.Add(new TextFieldFrame(_steamLoginBox), 1, 1);
         panel.Controls.Add(signInButton, 2, 1);
-        if (DarkMode.IsSupported)
+        if (WindowTheme.DrawsControls)
         {
-            _darkModeBox.CheckedChanged += (_, _) => SwitchDarkModeOnOrOff();
+            _darkModeBox.CheckedChanged += (_, _) => SwitchToDarkOrLight();
             panel.Controls.Add(_darkModeBox, 3, 1);
         }
 
         return panel;
     }
 
-    private void SwitchDarkModeOnOrOff()
+    private void SwitchToDarkOrLight()
     {
         _depotGrid.EndEdit();
-        DarkMode.SwitchOnOrOff(_darkModeBox.Checked, this);
+        WindowTheme.SwitchToDarkOrLight(_darkModeBox.Checked, this);
     }
 
     private Control BuildGameListPanel()
     {
-        IconButton addGameButton = new IconButton("Add game", "add") { Dock = DockStyle.Bottom };
+        IconButton addGameButton = new IconButton("Add game", "add") { Dock = DockStyle.Fill };
         addGameButton.Click += (_, _) => AddGame();
         _removeGameButton.Click += (_, _) => RemoveShownGame();
         _uploadTickedGamesButton.Click += async (_, _) => await UploadTickedGamesAsync();
         _gameSortOrderBox.Items.AddRange(new object[] { "Name A-Z", "Last build first", "Recently added first" });
+        TextFieldFrame gameFilter = new TextFieldFrame(_gameFilterBox, "filter");
+        ShowNameInTooltip(_gameFilterBox, "Filter", gameFilter);
+        ShowNameInTooltip(_gameSortOrderBox, "Sort by");
 
-        TableLayoutPanel filterAndSortOrder = new TableLayoutPanel
+        TableLayoutPanel panel = new TableLayoutPanel
         {
-            Dock = DockStyle.Top,
-            AutoSize = true,
-            ColumnCount = 2,
-            RowCount = 2,
-            Padding = new Padding(0, 0, 0, 4),
+            Dock = DockStyle.Fill,
+            ColumnCount = 1,
+            RowCount = 6,
+            Padding = new Padding(8),
         };
-        filterAndSortOrder.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
-        filterAndSortOrder.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        filterAndSortOrder.Controls.Add(NewIconThatNames(_gameFilterBox, "filter", "Filter"), 0, 0);
-        filterAndSortOrder.Controls.Add(_gameFilterBox, 1, 0);
-        filterAndSortOrder.Controls.Add(NewIconThatNames(_gameSortOrderBox, "sort", "Sort by"), 0, 1);
-        filterAndSortOrder.Controls.Add(_gameSortOrderBox, 1, 1);
-
-        Panel panel = new Panel { Dock = DockStyle.Fill, Padding = new Padding(8) };
-        panel.Controls.Add(_gameList);
-        panel.Controls.Add(filterAndSortOrder);
-        panel.Controls.Add(_uploadTickedGamesButton);
-        panel.Controls.Add(addGameButton);
-        panel.Controls.Add(_removeGameButton);
-        filterAndSortOrder.TabIndex = 0;
-        _gameList.TabIndex = 1;
-        _uploadTickedGamesButton.TabIndex = 2;
-        addGameButton.TabIndex = 3;
-        _removeGameButton.TabIndex = 4;
+        panel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        panel.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        panel.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        panel.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        panel.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        panel.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        panel.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        panel.Controls.Add(gameFilter, 0, 0);
+        panel.Controls.Add(_gameSortOrderBox, 0, 1);
+        panel.Controls.Add(new RoundedFrame(_gameList), 0, 2);
+        panel.Controls.Add(_uploadTickedGamesButton, 0, 3);
+        panel.Controls.Add(addGameButton, 0, 4);
+        panel.Controls.Add(_removeGameButton, 0, 5);
 
         return panel;
     }
 
     private Control BuildGameDetailsPanel()
     {
-        _depotGrid.Dock = DockStyle.Fill;
         _depotGrid.AllowUserToAddRows = false;
         _depotGrid.AllowUserToDeleteRows = false;
         _depotGrid.RowHeadersVisible = false;
@@ -274,7 +262,7 @@ internal sealed class MainForm : Form
             AutoSizeMode = DataGridViewAutoSizeColumnMode.AllCells,
             DefaultCellStyle = new DataGridViewCellStyle
             {
-                Padding = new Padding(_warningIcon.Width + 2 * DepotRowIconMargin, 0, 0, 0),
+                Padding = new Padding(_warningMark.Width + 2 * DepotRowIconMargin, 0, 0, 0),
             },
         });
         _depotGrid.Columns.Add(NewDepotRowIconButtonColumn(RemoveDepotButtonName, _trashIcon));
@@ -287,7 +275,8 @@ internal sealed class MainForm : Form
             }
         };
         _depotGrid.CellContentClick += (_, cell) => RunDepotRowButton(cell.RowIndex, cell.ColumnIndex);
-        _depotGrid.CellPainting += (_, cell) => PaintDepotRowIcon(cell);
+        _depotGrid.CellPainting += (_, cell) => PaintDepotCell(cell);
+        _depotGrid.EditingControlShowing += (_, edit) => ShowTextFieldColorsIn(edit);
 
         _gameNameBox.Validated += (_, _) => SaveShownGameWhenEdited();
         _descriptionBox.Validated += (_, _) => SaveShownGameWhenEdited();
@@ -302,7 +291,7 @@ internal sealed class MainForm : Form
         buttons.Controls.Add(_addDepotButton);
         buttons.Controls.Add(_uploadButton);
         buttons.Controls.Add(_stopButton);
-        buttons.Controls.Add(_uploadResultIcon);
+        buttons.Controls.Add(_uploadResultMark);
         buttons.Controls.Add(_uploadResultLabel);
 
         TableLayoutPanel panel = new TableLayoutPanel
@@ -322,16 +311,17 @@ internal sealed class MainForm : Form
         panel.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         panel.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         panel.Controls.Add(NewLabel("Name"), 0, 0);
-        panel.Controls.Add(_gameNameBox, 1, 0);
+        panel.Controls.Add(new TextFieldFrame(_gameNameBox), 1, 0);
         panel.Controls.Add(NewLabel("App ID"), 0, 1);
-        panel.Controls.Add(_appIdBox, 1, 1);
+        panel.Controls.Add(new TextFieldFrame(_appIdBox), 1, 1);
         panel.Controls.Add(NewLabel("Build description"), 0, 2);
-        panel.Controls.Add(_descriptionBox, 1, 2);
+        panel.Controls.Add(new TextFieldFrame(_descriptionBox), 1, 2);
         panel.Controls.Add(NewLabel("Set live on branch"), 0, 3);
-        panel.Controls.Add(_liveBranchBox, 1, 3);
+        panel.Controls.Add(new TextFieldFrame(_liveBranchBox), 1, 3);
         panel.Controls.Add(_uploadsNothingBox, 1, 4);
-        panel.Controls.Add(_depotGrid, 0, 5);
-        panel.SetColumnSpan(_depotGrid, 2);
+        RoundedFrame depotTable = new RoundedFrame(_depotGrid);
+        panel.Controls.Add(depotTable, 0, 5);
+        panel.SetColumnSpan(depotTable, 2);
         panel.Controls.Add(buttons, 0, 6);
         panel.SetColumnSpan(buttons, 2);
 
@@ -340,34 +330,35 @@ internal sealed class MainForm : Form
 
     private static Label NewLabel(string text)
     {
-        return new Label { Text = text, AutoSize = true, Anchor = AnchorStyles.Left };
+        return new Label { Text = text, AutoSize = true, Anchor = AnchorStyles.Right };
     }
 
-    private Bitmap TextLineIcon(string name)
+    private static Bitmap StatusMark(string iconName, Color fillInTheme)
     {
-        return EmbeddedIcon.LargestThatFits(name, _textLineIconPixels);
+        using Bitmap icon = EmbeddedIcon.LargestThatFits(iconName, WindowTheme.LineHeight);
+
+        return WindowTheme.DrawsControls
+            ? EmbeddedIcon.OnRoundedFill(icon, fillInTheme, ThemeColors.IconOnStatusFill)
+            : EmbeddedIcon.OnRoundedFill(icon, SystemColors.Highlight, SystemColors.HighlightText);
     }
 
-    private static int RowHeightOfAStandardList(Font font)
-    {
-        using ListBox standardList = new ListBox { Font = font };
-        standardList.CreateControl();
-
-        return standardList.ItemHeight;
-    }
-
-    private PictureBox NewIconThatNames(Control namedControl, string iconName, string name)
+    private void ShowNameInTooltip(Control namedControl, string name, Control? frameOfNamedControl = null)
     {
         namedControl.AccessibleName = name;
-        PictureBox icon = new PictureBox
+        _namesOfIcons.SetToolTip(namedControl, name);
+        if (frameOfNamedControl is not null)
         {
-            Image = TextLineIcon(iconName),
-            SizeMode = PictureBoxSizeMode.AutoSize,
-            Anchor = AnchorStyles.None,
-        };
-        _namesOfIcons.SetToolTip(icon, name);
+            _namesOfIcons.SetToolTip(frameOfNamedControl, name);
+        }
+    }
 
-        return icon;
+    private static void ShowTextFieldColorsIn(DataGridViewEditingControlShowingEventArgs edit)
+    {
+        if (WindowTheme.DrawsControls)
+        {
+            edit.CellStyle.BackColor = WindowTheme.Colors.EditedTextFieldFill;
+            edit.CellStyle.ForeColor = WindowTheme.Colors.TextFieldText;
+        }
     }
 
     private void DrawGameListItem(DrawItemEventArgs item)
@@ -377,40 +368,60 @@ internal sealed class MainForm : Form
             return;
         }
 
-        item.DrawBackground();
         AppBuildScript game = (AppBuildScript)_gameList.Items[item.Index];
+        bool isTicked = _scriptPathsOfTickedGames.Contains(game.FilePath);
         Rectangle checkBoxBounds = GameCheckBoxBounds(item.Graphics, item.Bounds);
-        using (SolidBrush listBackground = new SolidBrush(_gameList.BackColor))
+        Color textColor = item.ForeColor;
+        if (WindowTheme.DrawsControls)
         {
-            item.Graphics.FillRectangle(listBackground, Rectangle.Inflate(checkBoxBounds, 1, 1));
-        }
+            ThemeColors colors = WindowTheme.Colors;
+            bool isSelected = (item.State & DrawItemState.Selected) != 0;
+            textColor = isSelected ? colors.SelectedText : colors.ListItemText;
+            using (SolidBrush listFill = new SolidBrush(colors.ListFill))
+            {
+                item.Graphics.FillRectangle(listFill, item.Bounds);
+            }
 
-        CheckBoxState checkBoxState = _scriptPathsOfTickedGames.Contains(game.FilePath)
-            ? CheckBoxState.CheckedNormal
-            : CheckBoxState.UncheckedNormal;
-        if (DarkMode.IsOn)
-        {
-            DarkMode.DrawCheckBox(item.Graphics, checkBoxBounds, checkBoxState);
+            if (isSelected)
+            {
+                bool showsKeyboardFocus = (item.State & DrawItemState.Focus) != 0
+                    && (item.State & DrawItemState.NoFocusRect) == 0;
+                RoundedBox.Draw(item.Graphics, item.Bounds, WindowTheme.CornerRadius, colors.SelectedFill,
+                    showsKeyboardFocus ? colors.SelectedText : colors.SelectedFill);
+            }
+
+            ThemeCheckBox.DrawBox(item.Graphics, checkBoxBounds, isTicked, mouseIsOver: false, enabled: true,
+                colors.ListFill);
         }
         else
         {
-            CheckBoxRenderer.DrawCheckBox(item.Graphics, checkBoxBounds.Location, checkBoxState);
+            item.DrawBackground();
+            using (SolidBrush listBackground = new SolidBrush(_gameList.BackColor))
+            {
+                item.Graphics.FillRectangle(listBackground, Rectangle.Inflate(checkBoxBounds, 1, 1));
+            }
+
+            CheckBoxRenderer.DrawCheckBox(item.Graphics, checkBoxBounds.Location,
+                isTicked ? CheckBoxState.CheckedNormal : CheckBoxState.UncheckedNormal);
         }
 
         Rectangle textBounds = Rectangle.FromLTRB(checkBoxBounds.Right + DepotRowIconMargin, item.Bounds.Top,
             item.Bounds.Right, item.Bounds.Bottom);
         if (_gamesWithADepotWithoutFiles.Contains(game))
         {
-            textBounds.Width -= _gameListWarningIcon.Width + 2 * DepotRowIconMargin;
-            int top = item.Bounds.Top + (item.Bounds.Height - _gameListWarningIcon.Height) / 2;
-            item.Graphics.DrawImage(_gameListWarningIcon, new Rectangle(textBounds.Right + DepotRowIconMargin, top,
-                _gameListWarningIcon.Width, _gameListWarningIcon.Height));
+            textBounds.Width -= _warningMark.Width + 2 * DepotRowIconMargin;
+            item.Graphics.DrawImage(_warningMark, new Rectangle(textBounds.Right + DepotRowIconMargin,
+                item.Bounds.Top + (item.Bounds.Height - _warningMark.Height) / 2, _warningMark.Width,
+                _warningMark.Height));
         }
 
-        TextRenderer.DrawText(item.Graphics, _gameList.GetItemText(game), item.Font, textBounds, item.ForeColor,
+        TextRenderer.DrawText(item.Graphics, _gameList.GetItemText(game), item.Font, textBounds, textColor,
             TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis
             | TextFormatFlags.NoPrefix);
-        item.DrawFocusRectangle();
+        if (!WindowTheme.DrawsControls)
+        {
+            item.DrawFocusRectangle();
+        }
     }
 
     private static Rectangle GameCheckBoxBounds(Graphics graphics, Rectangle rowBounds)
@@ -515,72 +526,83 @@ internal sealed class MainForm : Form
         };
     }
 
-    private void PaintDepotRowIcon(DataGridViewCellPaintingEventArgs cell)
+    private void PaintDepotCell(DataGridViewCellPaintingEventArgs cell)
     {
         if (cell.RowIndex < 0)
         {
             return;
         }
 
-        if (cell.ColumnIndex == ContentSummaryColumn)
+        bool isRowButton = cell.ColumnIndex is BrowseContentFolderColumn or RemoveDepotColumn;
+        bool showsWarning = cell.ColumnIndex == ContentSummaryColumn
+            && cell.Value is ContentFolderSummary { HasFiles: false };
+        if (!isRowButton && !showsWarning)
         {
-            if (cell.Value is ContentFolderSummary { HasFiles: false })
-            {
-                cell.Paint(cell.ClipBounds, DataGridViewPaintParts.All);
-                DrawIconInDepotRow(cell, _warningIcon, cell.CellBounds.Left + DepotRowIconMargin);
-            }
-
             return;
         }
 
-        if (cell.ColumnIndex is BrowseContentFolderColumn or RemoveDepotColumn)
+        DataGridViewPaintParts partsDrawnByTheGrid = DataGridViewPaintParts.All;
+        if (isRowButton)
         {
-            Bitmap icon = cell.ColumnIndex == BrowseContentFolderColumn ? _folderIcon : _trashIcon;
-            if (DarkMode.IsOn)
-            {
-                cell.Paint(cell.ClipBounds, DataGridViewPaintParts.All & ~DataGridViewPaintParts.ContentForeground
-                    & ~DataGridViewPaintParts.ContentBackground);
-                DarkMode.DrawPushButton(cell.Graphics, DepotRowButtonBounds(cell.CellBounds),
-                    DepotRowButtonState(cell.CellBounds));
-            }
-            else
-            {
-                cell.Paint(cell.ClipBounds, DataGridViewPaintParts.All & ~DataGridViewPaintParts.ContentForeground);
-            }
-
-            DrawIconInDepotRow(cell, icon, cell.CellBounds.Left + (cell.CellBounds.Width - icon.Width) / 2);
-        }
-    }
-
-    private static Rectangle DepotRowButtonBounds(Rectangle cellBounds)
-    {
-        const int gridLinePixels = 1;
-
-        return new Rectangle(cellBounds.Left, cellBounds.Top, cellBounds.Width - gridLinePixels,
-            cellBounds.Height - gridLinePixels);
-    }
-
-    private PushButtonState DepotRowButtonState(Rectangle cellBounds)
-    {
-        if (!cellBounds.Contains(_depotGrid.PointToClient(MousePosition)))
-        {
-            return PushButtonState.Normal;
+            partsDrawnByTheGrid &= ~DataGridViewPaintParts.ContentForeground;
         }
 
-        return MouseButtons == MouseButtons.Left ? PushButtonState.Pressed : PushButtonState.Hot;
-    }
+        if (isRowButton && WindowTheme.DrawsControls)
+        {
+            partsDrawnByTheGrid &= ~DataGridViewPaintParts.ContentBackground;
+        }
 
-    private static void DrawIconInDepotRow(DataGridViewCellPaintingEventArgs cell, Bitmap icon, int left)
-    {
-        int top = cell.CellBounds.Top + (cell.CellBounds.Height - icon.Height) / 2;
-        cell.Graphics.DrawImage(icon, new Rectangle(left, top, icon.Width, icon.Height));
+        cell.Paint(cell.ClipBounds, partsDrawnByTheGrid);
         cell.Handled = true;
+        if (showsWarning)
+        {
+            cell.Graphics.DrawImage(_warningMark, new Rectangle(cell.CellBounds.Left + DepotRowIconMargin,
+                cell.CellBounds.Top + (cell.CellBounds.Height - _warningMark.Height) / 2, _warningMark.Width,
+                _warningMark.Height));
+        }
+
+        if (isRowButton)
+        {
+            DrawDepotRowButton(cell);
+        }
     }
 
-    private void ShowUploadResult(Image? icon, string text)
+    private void DrawDepotRowButton(DataGridViewCellPaintingEventArgs cell)
     {
-        _uploadResultIcon.Image = icon;
-        _uploadResultIcon.Visible = icon is not null;
+        bool choosesContentFolder = cell.ColumnIndex == BrowseContentFolderColumn;
+        Bitmap icon = choosesContentFolder ? _folderIcon : _trashIcon;
+        Color iconColor = SystemColors.ControlText;
+        if (WindowTheme.DrawsControls)
+        {
+            ThemeColors colors = WindowTheme.Colors;
+            bool mouseIsOver = cell.CellBounds.Contains(_depotGrid.PointToClient(MousePosition));
+            bool isHeldDown = mouseIsOver && MouseButtons == MouseButtons.Left;
+            Color fill = isHeldDown ? colors.SelectedFill : colors.ButtonFill;
+            if (mouseIsOver && !isHeldDown)
+            {
+                fill = ThemeColors.FillUnderMouse(fill, colors.ButtonText);
+            }
+
+            bool hasKeyboardFocus = _depotGrid.Focused && _depotGrid.CurrentCellAddress.X == cell.ColumnIndex
+                && _depotGrid.CurrentCellAddress.Y == cell.RowIndex && WindowTheme.KeyboardFocusIsShownIn(_depotGrid);
+            RoundedBox.Draw(cell.Graphics, Rectangle.Inflate(cell.CellBounds, -2, -2), WindowTheme.CornerRadius,
+                fill, hasKeyboardFocus ? colors.SelectedText : colors.Outline);
+            iconColor = choosesContentFolder ? colors.FolderIcon : colors.ButtonText;
+            if (isHeldDown)
+            {
+                iconColor = colors.SelectedText;
+            }
+        }
+
+        Point iconTopLeft = new Point(cell.CellBounds.Left + (cell.CellBounds.Width - icon.Width) / 2,
+            cell.CellBounds.Top + (cell.CellBounds.Height - icon.Height) / 2);
+        EmbeddedIcon.Draw(cell.Graphics, icon, iconTopLeft, iconColor);
+    }
+
+    private void ShowUploadResult(Image? mark, string text)
+    {
+        _uploadResultMark.Image = mark;
+        _uploadResultMark.Visible = mark is not null;
         _uploadResultLabel.Text = text;
     }
 
@@ -1232,7 +1254,7 @@ internal sealed class MainForm : Form
         SaveSettings();
         string steamLogin = _steamLoginBox.Text.Trim();
         string scriptCopiesFolder = Path.Combine(Path.GetTempPath(), "DepotUploader", Guid.NewGuid().ToString("N"));
-        Image? resultIconOfLastUpload = _uploadResultIcon.Image;
+        Image? resultMarkOfLastUpload = _uploadResultMark.Image;
         string resultOfLastUpload = _uploadResultLabel.Text;
         CancellationTokenSource uploadCancellation = new CancellationTokenSource();
         _uploadCancellation = uploadCancellation;
@@ -1274,7 +1296,7 @@ internal sealed class MainForm : Form
             {
                 if (!IsDisposed)
                 {
-                    ShowUploadResult(resultIconOfLastUpload, resultOfLastUpload);
+                    ShowUploadResult(resultMarkOfLastUpload, resultOfLastUpload);
                     MessageBox.Show(this, $"The upload was not started. {exception.Message}", Text,
                         MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 }
@@ -1287,7 +1309,7 @@ internal sealed class MainForm : Form
                 return;
             }
 
-            ShowUploadResult(resultIconOfLastUpload, resultOfLastUpload);
+            ShowUploadResult(resultMarkOfLastUpload, resultOfLastUpload);
             if (confirmedContent is null)
             {
                 return;
@@ -1328,7 +1350,7 @@ internal sealed class MainForm : Form
             }
 
             string uploadOrPreview = uploads[0].UploadsNothing ? "Preview build" : "Upload";
-            ShowUploadResult(ResultIcon(outcomes), uploads.Length == 1
+            ShowUploadResult(ResultMark(outcomes), uploads.Length == 1
                 ? $"{uploadOrPreview} of {uploads[0].GameName} {outcomeInResultLine} at {DateTime.Now:HH:mm}"
                 : BatchResultLine.Text(
                     uploads.Zip(outcomes, (upload, outcome) => (upload.GameName, outcome)).ToArray(), DateTime.Now));
@@ -1470,19 +1492,19 @@ internal sealed class MainForm : Form
         }
     }
 
-    private Bitmap ResultIcon(UploadOutcome[] outcomes)
+    private Bitmap ResultMark(UploadOutcome[] outcomes)
     {
         if (outcomes.Contains(UploadOutcome.Stopped))
         {
-            return _stopIcon;
+            return _stoppedMark;
         }
 
         if (outcomes.Contains(UploadOutcome.Failed))
         {
-            return _failureIcon;
+            return _failureMark;
         }
 
-        return outcomes.Contains(UploadOutcome.NotStarted) ? _stopIcon : _successIcon;
+        return outcomes.Contains(UploadOutcome.NotStarted) ? _stoppedMark : _successMark;
     }
 
     private void DeleteScriptCopies(string scriptCopiesFolder)

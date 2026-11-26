@@ -41,12 +41,12 @@ internal sealed class AddDepotForm : Form
         };
         layout.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
         layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        layout.Controls.Add(new Label { Text = "Depot ID", AutoSize = true, Anchor = AnchorStyles.Left }, 0, 0);
-        layout.Controls.Add(_depotIdBox, 1, 0);
+        layout.Controls.Add(new Label { Text = "Depot ID", AutoSize = true, Anchor = AnchorStyles.Right }, 0, 0);
+        layout.Controls.Add(new TextFieldFrame(_depotIdBox), 1, 0);
         layout.Controls.Add(buttons, 0, 1);
         layout.SetColumnSpan(buttons, 2);
         Controls.Add(layout);
-        DarkMode.ApplyToNewWindow(this);
+        WindowTheme.ApplyToNewWindow(this);
         ResumeLayout();
     }
 

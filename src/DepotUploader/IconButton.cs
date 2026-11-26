@@ -1,13 +1,10 @@
-using System.Windows.Forms.VisualStyles;
-
 namespace DepotUploader;
 
 internal sealed class IconButton : Button
 {
-    private static readonly int IconPixels = SystemFonts.MessageBoxFont.Height;
+    private static readonly int IconPixels = WindowTheme.LineHeight;
     private static readonly int SpaceLeftOfIcon = IconPixels / 3;
     private static readonly int SpaceBesideText = SpaceLeftOfIcon + IconPixels + IconPixels / 4;
-    private static readonly int ButtonHeight = IconPixels + 2 * (IconPixels * 3 / 8);
 
     private Bitmap? _icon;
 
@@ -31,63 +28,52 @@ internal sealed class IconButton : Button
 
     public override Size GetPreferredSize(Size proposedSize)
     {
-        return new Size(TextRenderer.MeasureText(Text, Font).Width + 2 * SpaceBesideText, ButtonHeight);
+        return new Size(TextRenderer.MeasureText(Text, Font).Width + 2 * SpaceBesideText, WindowTheme.ControlHeight);
     }
 
     protected override void OnPaint(PaintEventArgs paint)
     {
-        if (DarkMode.IsOn)
-        {
-            PaintDarkButtonWithText(paint.Graphics);
-        }
-        else
+        if (!WindowTheme.DrawsControls)
         {
             base.OnPaint(paint);
-        }
+            DrawIcon(paint.Graphics, Enabled ? ForeColor : SystemColors.GrayText);
 
-        if (_icon is null)
-        {
             return;
         }
 
-        int top = (ClientSize.Height - _icon.Height) / 2;
-        if (Enabled)
-        {
-            paint.Graphics.DrawImage(_icon, new Rectangle(SpaceLeftOfIcon, top, _icon.Width, _icon.Height));
-        }
-        else
-        {
-            ControlPaint.DrawImageDisabled(paint.Graphics, _icon, SpaceLeftOfIcon, top, BackColor);
-        }
-    }
-
-    private void PaintDarkButtonWithText(Graphics graphics)
-    {
-        graphics.Clear(BackColor);
-        DarkMode.DrawPushButton(graphics, ClientRectangle, DarkButtonState());
-        TextRenderer.DrawText(graphics, Text, Font, ClientRectangle,
-            Enabled ? DarkMode.TextColor : DarkMode.DisabledTextColor,
-            TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
-        if (Focused && ShowFocusCues)
-        {
-            ControlPaint.DrawFocusRectangle(graphics, Rectangle.Inflate(ClientRectangle, -3, -3),
-                DarkMode.TextColor, BackColor);
-        }
-    }
-
-    private PushButtonState DarkButtonState()
-    {
+        ThemeColors colors = WindowTheme.Colors;
+        bool mouseIsOver = ClientRectangle.Contains(PointToClient(MousePosition));
+        bool isHeldDown = mouseIsOver && Capture;
+        bool confirmsDialogOnEnter = IsDefault && FindForm()?.AcceptButton is not null;
+        bool looksSelected = isHeldDown || confirmsDialogOnEnter;
+        Color fill = looksSelected ? colors.SelectedFill : colors.ButtonFill;
+        Color textColor = looksSelected ? colors.SelectedText : colors.ButtonText;
+        Color outline = IsDefault || (Focused && ShowFocusCues) ? textColor : colors.Outline;
         if (!Enabled)
         {
-            return PushButtonState.Disabled;
+            fill = ThemeColors.OfDisabledControl(fill, BackColor);
+            outline = ThemeColors.OfDisabledControl(outline, BackColor);
+            textColor = ThemeColors.OfDisabledControl(textColor, fill);
         }
-
-        if (ClientRectangle.Contains(PointToClient(MousePosition)))
+        else if (mouseIsOver && !isHeldDown)
         {
-            return Capture ? PushButtonState.Pressed : PushButtonState.Hot;
+            fill = ThemeColors.FillUnderMouse(fill, textColor);
         }
 
-        return Focused || IsDefault ? PushButtonState.Default : PushButtonState.Normal;
+        paint.Graphics.Clear(BackColor);
+        RoundedBox.Draw(paint.Graphics, ClientRectangle, WindowTheme.CornerRadius, fill, outline);
+        TextRenderer.DrawText(paint.Graphics, Text, Font, ClientRectangle, textColor,
+            TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
+        DrawIcon(paint.Graphics, textColor);
+    }
+
+    private void DrawIcon(Graphics graphics, Color color)
+    {
+        if (_icon is not null)
+        {
+            EmbeddedIcon.Draw(graphics, _icon, new Point(SpaceLeftOfIcon, (ClientSize.Height - _icon.Height) / 2),
+                color);
+        }
     }
 
     protected override void Dispose(bool disposing)

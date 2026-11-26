@@ -64,10 +64,10 @@ internal sealed class UploadConfirmationForm : Form
         layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         layout.Controls.Add(_questionLabel, 0, 0);
-        layout.Controls.Add(_detailsBox, 0, 1);
+        layout.Controls.Add(new RoundedFrame(_detailsBox), 0, 1);
         layout.Controls.Add(_buttons, 0, 2);
         Controls.Add(layout);
-        DarkMode.ApplyToNewWindow(this);
+        WindowTheme.ApplyToNewWindow(this);
         ActiveControl = confirmButton;
         ResumeLayout();
     }

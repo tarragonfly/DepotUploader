@@ -49,7 +49,7 @@ internal sealed class AddGameForm : Form
         layout.Controls.Add(buttons, 0, 3);
         layout.SetColumnSpan(buttons, 2);
         Controls.Add(layout);
-        DarkMode.ApplyToNewWindow(this);
+        WindowTheme.ApplyToNewWindow(this);
         ResumeLayout();
     }
 
@@ -71,10 +71,10 @@ internal sealed class AddGameForm : Form
         }
     }
 
-    private static void AddRow(TableLayoutPanel layout, int row, string label, Control field)
+    private static void AddRow(TableLayoutPanel layout, int row, string label, TextBox field)
     {
-        layout.Controls.Add(new Label { Text = label, AutoSize = true, Anchor = AnchorStyles.Left }, 0, row);
-        layout.Controls.Add(field, 1, row);
+        layout.Controls.Add(new Label { Text = label, AutoSize = true, Anchor = AnchorStyles.Right }, 0, row);
+        layout.Controls.Add(new TextFieldFrame(field), 1, row);
     }
 
     public static bool IsNumber(string text)
